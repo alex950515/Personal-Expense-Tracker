@@ -1504,6 +1504,25 @@
         }
       }
 
+      async function declineInvitation(inv) {
+        const ok = await askConfirm({
+          title: '拒絕共同帳本邀請',
+          message: `確定要拒絕「${inv.inviter_nickname}」對共同帳本「${inv.ledger_name}」的邀請嗎？`,
+          danger: true,
+          confirmText: '確認拒絕',
+        });
+        if (!ok) return;
+        try {
+          await firebase.firestore().collection('ledger_invitations').doc(inv.id).update({
+            status: 'declined',
+            responded_at: firebase.firestore.FieldValue.serverTimestamp(),
+          });
+          showToast(`已拒絕加入「${inv.ledger_name}」`);
+        } catch (err) {
+          showToast('拒絕邀請失敗：' + err.message);
+        }
+      }
+
       async function removeMember(targetUid) {
         if (!isOwner || targetUid === user.uid) return;
         const ok = await askConfirm({
@@ -1657,9 +1676,24 @@
             <div className="p-5 rounded-2xl bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 space-y-3">
               <h3 className="font-bold text-base">收到共同帳本邀請</h3>
               {invitations.map((inv) => (
-                <div key={inv.id} className="flex items-center justify-between gap-2">
-                  <span><strong>{inv.inviter_nickname}</strong> 邀請您加入「<strong>{inv.ledger_name}</strong>」</span>
-                  <button type="button" onClick={() => acceptInvitation(inv)} className="px-4 py-1.5 rounded-xl bg-latte-600 text-white font-semibold">接受加入</button>
+                <div key={inv.id} className="flex flex-wrap items-center justify-between gap-3 bg-white/60 dark:bg-neutral-800/60 p-3 rounded-xl border border-amber-200/70 dark:border-amber-800/50">
+                  <span className="text-xs sm:text-sm"><strong>{inv.inviter_nickname}</strong> 邀請您加入「<strong>{inv.ledger_name}</strong>」</span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => declineInvitation(inv)}
+                      className="px-3.5 py-1.5 rounded-xl bg-white dark:bg-neutral-700 hover:bg-rose-50 dark:hover:bg-rose-900/30 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 font-semibold text-xs transition"
+                    >
+                      拒絕
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => acceptInvitation(inv)}
+                      className="px-4 py-1.5 rounded-xl bg-latte-600 hover:bg-latte-700 text-white font-semibold text-xs transition"
+                    >
+                      接受加入
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
