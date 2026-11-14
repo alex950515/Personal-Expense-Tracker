@@ -10,6 +10,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="暖心記帳" />
+  <link rel="icon" type="image/png" href="./icon.png" />
   <link rel="apple-touch-icon" href="./icon.png" />
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -1039,7 +1040,6 @@
                   )}
                 </div>
                 <div className="text-[11px] text-latte-500 dark:text-neutral-400 flex gap-2 flex-wrap">
-                  <span>{tx.date}</span>
                   <span>{tx.payment_method}</span>
                   {tx.note && <span className="truncate">備註：{tx.note}</span>}
                 </div>
@@ -1077,6 +1077,28 @@
         });
         return map;
       }, [categories]);
+
+      // 依日期分組收支明細，並計算每日小計與星期
+      const groupedTransactions = useMemo(() => {
+        const groups = {};
+        const weekDays = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
+        (transactions || []).forEach((tx) => {
+          const d = tx.date || '未知日期';
+          if (!groups[d]) {
+            let weekLabel = '';
+            if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+              const dt = new Date(d + 'T00:00:00');
+              if (!isNaN(dt.getTime())) weekLabel = weekDays[dt.getDay()];
+            }
+            groups[d] = { date: d, weekLabel, items: [], income: 0, expense: 0 };
+          }
+          groups[d].items.push(tx);
+          const amt = Number(tx.amount) || 0;
+          if (tx.type === 'income') groups[d].income += amt;
+          else groups[d].expense += amt;
+        });
+        return Object.values(groups).sort((a, b) => b.date.localeCompare(a.date));
+      }, [transactions]);
 
       return (
         <div className="space-y-4">
@@ -1159,17 +1181,37 @@
             {transactions.length === 0 ? (
               <div className="p-8 text-center text-xs sm:text-sm text-latte-500 dark:text-neutral-400">此期間尚無收支紀錄</div>
             ) : (
-              <div className="divide-y divide-latte-100 dark:divide-neutral-700/60">
-                {transactions.map((tx) => (
-                  <SwipeableTransactionItem
-                    key={tx.id}
-                    tx={tx}
-                    activeLedger={activeLedger}
-                    currencySymbol={currencySymbol}
-                    categoryEmoji={emojiMap[`${tx.type}::${tx.major_category}::${tx.sub_category}`]}
-                    onEditClick={onEditClick}
-                    onDeleteClick={onDeleteClick}
-                  />
+              <div>
+                {groupedTransactions.map((group) => (
+                  <div key={group.date}>
+                    <div className="px-5 py-2 bg-latte-100/80 dark:bg-neutral-700/60 border-y border-latte-200/60 dark:border-neutral-700 flex items-center justify-between text-[11px] sm:text-xs font-semibold text-latte-700 dark:text-neutral-200">
+                      <div className="flex items-center gap-2">
+                        <span>{group.date}</span>
+                        {group.weekLabel && <span className="text-latte-500 dark:text-neutral-400 font-normal">{group.weekLabel}</span>}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {group.income > 0 && (
+                          <span className="text-emerald-600 dark:text-emerald-400">+{currencySymbol}{group.income.toLocaleString()}</span>
+                        )}
+                        {group.expense > 0 && (
+                          <span className="text-rose-600 dark:text-rose-400">-{currencySymbol}{group.expense.toLocaleString()}</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="divide-y divide-latte-100 dark:divide-neutral-700/60">
+                      {group.items.map((tx) => (
+                        <SwipeableTransactionItem
+                          key={tx.id}
+                          tx={tx}
+                          activeLedger={activeLedger}
+                          currencySymbol={currencySymbol}
+                          categoryEmoji={emojiMap[`${tx.type}::${tx.major_category}::${tx.sub_category}`]}
+                          onEditClick={onEditClick}
+                          onDeleteClick={onDeleteClick}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
@@ -1356,7 +1398,7 @@
     }
 
     // ==================== 設定、共同帳本、分類與付款方式管理 ====================
-    function SettingsView({ user, profile, ledgers, activeLedger, setActiveLedgerId, invitations, categories, paymentMethods, transactions, theme, setTheme, showToast, askConfirm, askPrompt }) {
+    function SettingsView({ user, profile, ledgers, activeLedger, setActiveLedgerId, invitations, categories, paymentMethods, transactions, theme, setTheme, showToast, askConfirm, askPrompt, deferredPrompt, onInstallApp, isStandalone }) {
       const [nicknameInput, setNicknameInput] = useState(profile?.nickname || '');
       const [newCoupleLedgerName, setNewCoupleLedgerName] = useState('');
       const [inviteEmail, setInviteEmail] = useState('');
@@ -1366,6 +1408,19 @@
       const [catMajor, setCatMajor] = useState('');
       const [catSub, setCatSub] = useState('');
       const [newPmName, setNewPmName] = useState('');
+
+      // 類別編輯與長按排序狀態
+      const [editingCategory, setEditingCategory] = useState(null);
+      const [editCatForm, setEditCatForm] = useState({ type: 'expense', emoji: '📝', major: '', sub: '' });
+      const [orderedCats, setOrderedCats] = useState([]);
+      const [draggingCatId, setDraggingCatId] = useState(null);
+      const longPressTimerRef = useRef(null);
+      const orderedCatsRef = useRef([]);
+
+      useEffect(() => {
+        setOrderedCats(categories || []);
+        orderedCatsRef.current = categories || [];
+      }, [categories]);
 
       useEffect(() => {
         if (profile?.nickname) setNicknameInput(profile.nickname);
@@ -1621,18 +1676,109 @@
           return;
         }
         try {
+          const maxOrder = orderedCats.reduce((max, item) => Math.max(max, Number(item.sort_order) || 0), orderedCats.length);
           await firebase.firestore().collection('categories').add({
             ledger_id: activeLedger.id,
             type: catType,
             emoji: catEmoji.trim() || '📝',
             major: catMajor.trim(),
             sub: catSub.trim(),
+            sort_order: maxOrder + 1,
             is_archived: false,
           });
           setCatSub('');
           showToast('已新增自訂分類');
         } catch (err) {
           showToast('新增分類失敗：' + err.message);
+        }
+      }
+
+      function openEditCategoryModal(cat) {
+        setEditingCategory(cat);
+        setEditCatForm({
+          type: cat.type || 'expense',
+          emoji: cat.emoji || '📝',
+          major: cat.major || '',
+          sub: cat.sub || '',
+        });
+      }
+
+      async function saveEditedCategory(e) {
+        e.preventDefault();
+        if (!editingCategory) return;
+        if (!editCatForm.major.trim() || !editCatForm.sub.trim()) {
+          showToast('請完整輸入大分類與子分類名稱');
+          return;
+        }
+        try {
+          await firebase.firestore().collection('categories').doc(editingCategory.id).update({
+            type: editCatForm.type,
+            emoji: editCatForm.emoji.trim() || '📝',
+            major: editCatForm.major.trim(),
+            sub: editCatForm.sub.trim(),
+          });
+          setEditingCategory(null);
+          showToast('已更新分類設定');
+        } catch (err) {
+          showToast('更新分類失敗：' + err.message);
+        }
+      }
+
+      async function persistCategoryOrder(listToSave) {
+        try {
+          const db = firebase.firestore();
+          const batch = db.batch();
+          listToSave.forEach((item, idx) => {
+            batch.update(db.collection('categories').doc(item.id), { sort_order: idx });
+          });
+          await batch.commit();
+          showToast('已儲存分類順序');
+        } catch (err) {
+          showToast('更新順序失敗：' + err.message);
+        }
+      }
+
+      function moveCategoryItem(fromIdx, toIdx) {
+        if (fromIdx === toIdx || fromIdx < 0 || toIdx < 0) return;
+        setOrderedCats((prev) => {
+          const next = [...prev];
+          const [moved] = next.splice(fromIdx, 1);
+          next.splice(toIdx, 0, moved);
+          orderedCatsRef.current = next;
+          return next;
+        });
+      }
+
+      function handleCatPointerDown(catId) {
+        if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = setTimeout(() => {
+          setDraggingCatId(catId);
+          if (navigator.vibrate) navigator.vibrate(25);
+        }, 280);
+      }
+
+      function handleCatTouchMove(e) {
+        if (!draggingCatId) return;
+        if (e.cancelable) e.preventDefault();
+        const touch = e.touches[0];
+        const target = document.elementFromPoint(touch.clientX, touch.clientY);
+        const chipEl = target?.closest('[data-cat-id]');
+        const overId = chipEl?.getAttribute('data-cat-id');
+        if (overId && overId !== draggingCatId) {
+          const fromIdx = orderedCatsRef.current.findIndex((c) => c.id === draggingCatId);
+          const toIdx = orderedCatsRef.current.findIndex((c) => c.id === overId);
+          moveCategoryItem(fromIdx, toIdx);
+        }
+      }
+
+      function handleCatPointerUp() {
+        if (longPressTimerRef.current) {
+          clearTimeout(longPressTimerRef.current);
+          longPressTimerRef.current = null;
+        }
+        if (draggingCatId) {
+          setDraggingCatId(null);
+          persistCategoryOrder(orderedCatsRef.current);
         }
       }
 
@@ -1707,126 +1853,162 @@
           )}
 
           <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-4">
-            <h3 className="font-bold text-base">個人設定與外觀</h3>
-            <div className="flex gap-2">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-base">自訂收支分類（目前帳本）</h3>
+              <span className="text-[11px] text-latte-500 dark:text-neutral-400">長按拖曳可調整順序・點擊可編輯</span>
+            </div>
+            <form onSubmit={addCategory} className="flex flex-wrap gap-2">
+              <select
+                value={catType}
+                onChange={(e) => setCatType(e.target.value)}
+                className="p-2.5 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600 text-xs"
+              >
+                <option value="expense">支出</option>
+                <option value="income">收入</option>
+              </select>
               <input
                 type="text"
-                value={nicknameInput}
-                onChange={(e) => setNicknameInput(e.target.value)}
-                placeholder="設定顯示暱稱"
-                className="flex-1 p-2.5 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600"
+                placeholder="Emoji"
+                value={catEmoji}
+                onChange={(e) => setCatEmoji(e.target.value)}
+                className="w-16 text-center p-2.5 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600 text-sm"
               />
-              <button type="button" onClick={saveNickname} className="px-4 py-2 rounded-xl bg-latte-600 text-white font-semibold">更新暱稱</button>
-            </div>
-            <div className="flex items-center justify-between pt-2">
-              <span>顯示主題模式</span>
-              <div className="flex gap-2">
-                {[['light', '淺色'], ['dark', '深色'], ['system', '跟隨系統']].map(([val, lbl]) => (
-                  <button
-                    type="button"
-                    key={val}
-                    onClick={() => setTheme(val)}
-                    className={`px-3 py-1.5 rounded-xl border ${theme === val ? 'bg-latte-600 text-white border-latte-600' : 'border-latte-300 dark:border-neutral-600'}`}
+              <input
+                type="text"
+                placeholder="大分類名稱"
+                value={catMajor}
+                onChange={(e) => setCatMajor(e.target.value)}
+                className="flex-1 min-w-[100px] p-2.5 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600 text-xs"
+              />
+              <input
+                type="text"
+                placeholder="子分類名稱"
+                value={catSub}
+                onChange={(e) => setCatSub(e.target.value)}
+                className="flex-1 min-w-[100px] p-2.5 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600 text-xs"
+              />
+              <button type="submit" className="px-4 py-2.5 rounded-xl bg-latte-600 text-white font-semibold text-xs">新增分類</button>
+            </form>
+            <div
+              onTouchMove={handleCatTouchMove}
+              onTouchEnd={handleCatPointerUp}
+              onMouseUp={handleCatPointerUp}
+              className="flex flex-wrap gap-2 pt-2 select-none"
+            >
+              {orderedCats.map((c) => {
+                const isDragging = draggingCatId === c.id;
+                return (
+                  <div
+                    key={c.id}
+                    data-cat-id={c.id}
+                    onTouchStart={() => handleCatPointerDown(c.id)}
+                    onMouseDown={() => handleCatPointerDown(c.id)}
+                    onMouseEnter={() => {
+                      if (draggingCatId && draggingCatId !== c.id) {
+                        const fromIdx = orderedCatsRef.current.findIndex((item) => item.id === draggingCatId);
+                        const toIdx = orderedCatsRef.current.findIndex((item) => item.id === c.id);
+                        moveCategoryItem(fromIdx, toIdx);
+                      }
+                    }}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs border transition cursor-grab active:cursor-grabbing ${
+                      isDragging
+                        ? 'scale-105 bg-latte-200 dark:bg-neutral-600 border-latte-600 shadow-md z-10'
+                        : 'bg-latte-50 dark:bg-neutral-700/50 border-latte-200 dark:border-neutral-600'
+                    }`}
                   >
-                    {lbl}
-                  </button>
-                ))}
-              </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!draggingCatId) openEditCategoryModal(c);
+                      }}
+                      className="flex items-center gap-1 text-left hover:text-latte-700 dark:hover:text-white"
+                      title="點擊編輯分類"
+                    >
+                      <span>{c.emoji || '📝'} {c.type === 'income' ? '收' : '支'} | {c.major} / {c.sub}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteCategory(c);
+                      }}
+                      className="text-rose-500 hover:font-bold ml-1 px-1"
+                      title="刪除此分類"
+                    >
+                      ×
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
-          <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-4">
-            <h3 className="font-bold text-base">帳本管理與情侶共同帳本</h3>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={newCoupleLedgerName}
-                onChange={(e) => setNewCoupleLedgerName(e.target.value)}
-                placeholder="輸入新的情侶共同帳本名稱..."
-                className="flex-1 p-2.5 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600"
-              />
-              <button type="button" onClick={createCoupleLedger} className="px-4 py-2 rounded-xl bg-latte-600 text-white font-semibold">建立共同帳本</button>
-            </div>
-
-            {activeLedger && (
-              <div className="p-4 rounded-xl bg-latte-50 dark:bg-neutral-700/50 space-y-3">
+          {editingCategory && (
+            <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+              <form onSubmit={saveEditedCategory} className="bg-white dark:bg-neutral-800 rounded-2xl max-w-sm w-full p-5 shadow-xl border border-latte-200 dark:border-neutral-700 space-y-4">
                 <div className="flex items-center justify-between">
-                  <span className="font-bold">目前帳本：{activeLedger.name}</span>
-                  <div className="flex items-center gap-2">
-                    <span>幣別：</span>
+                  <h4 className="font-bold text-base text-latte-900 dark:text-white">編輯分類</h4>
+                  <button type="button" onClick={() => setEditingCategory(null)} className="text-neutral-400 hover:text-neutral-600">✕</button>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-[11px] font-medium mb-1">類型</label>
                     <select
-                      disabled={!isOwner}
-                      value={activeLedger.currency}
-                      onChange={(e) => changeCurrency(e.target.value)}
-                      className="p-1.5 rounded-lg border dark:bg-neutral-700 dark:border-neutral-600"
+                      value={editCatForm.type}
+                      onChange={(e) => setEditCatForm({ ...editCatForm, type: e.target.value })}
+                      className="w-full p-2 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600 text-xs"
                     >
-                      {CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
+                      <option value="expense">支出</option>
+                      <option value="income">收入</option>
                     </select>
                   </div>
-                </div>
-
-                {activeLedger.type === 'couple' && (
-                  <div className="space-y-2 border-t border-latte-200 dark:border-neutral-600 pt-3">
-                    <div className="font-semibold">成員列表（{(activeLedger.memberIds || []).length} / 5 人）</div>
-                    {Object.entries(activeLedger.members || {}).map(([mUid, mInfo]) => (
-                      <div key={mUid} className="flex items-center justify-between">
-                        <span>{mInfo.nickname} ({mInfo.email}) {mInfo.role === 'owner' ? '👑 擁有者' : ''}</span>
-                        {isOwner && mUid !== user.uid && (
-                          <button type="button" onClick={() => removeMember(mUid)} className="text-xs text-rose-600 hover:underline">移除成員</button>
-                        )}
-                      </div>
-                    ))}
-                    {isOwner && (
-                      <div className="flex gap-2 pt-2">
-                        <input
-                          type="email"
-                          value={inviteEmail}
-                          onChange={(e) => setInviteEmail(e.target.value)}
-                          placeholder="輸入伴侶的 Google Email 發送邀請..."
-                          className="flex-1 p-2 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600"
-                        />
-                        <button type="button" onClick={sendInvitation} className="px-4 py-2 rounded-xl bg-latte-600 text-white font-semibold">邀請</button>
-                      </div>
-                    )}
+                  <div className="col-span-2">
+                    <label className="block text-[11px] font-medium mb-1">圖示 Emoji</label>
+                    <input
+                      type="text"
+                      value={editCatForm.emoji}
+                      onChange={(e) => setEditCatForm({ ...editCatForm, emoji: e.target.value })}
+                      className="w-full p-2 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600 text-sm text-center"
+                    />
                   </div>
-                )}
-              </div>
-            )}
-
-            <div className="space-y-2 pt-2">
-              <div className="font-semibold text-xs text-latte-500">所有帳本（更改名稱 / 封存 / 還原 / 永久刪除）</div>
-              {ledgers.map((l) => (
-                <div key={l.id} className="flex items-center justify-between p-3 rounded-xl border border-latte-200 dark:border-neutral-700">
-                  <span>{l.name} {l.is_archived ? '（已封存）' : ''}</span>
-                  {l.owner_id === user.uid && (
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => updateLedgerName(l)}
-                        className="px-3 py-1 rounded-lg bg-latte-200 dark:bg-neutral-700 text-xs font-semibold"
-                      >
-                        更改名稱
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => toggleArchiveLedger(l, !l.is_archived)}
-                        className="px-3 py-1 rounded-lg bg-latte-200 dark:bg-neutral-700 text-xs"
-                      >
-                        {l.is_archived ? '解除封存' : '封存'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => permanentlyDeleteLedger(l)}
-                        className="px-3 py-1 rounded-lg bg-rose-600 text-white text-xs"
-                      >
-                        永久刪除
-                      </button>
-                    </div>
-                  )}
                 </div>
-              ))}
+                <div>
+                  <label className="block text-[11px] font-medium mb-1">大分類名稱</label>
+                  <input
+                    type="text"
+                    value={editCatForm.major}
+                    onChange={(e) => setEditCatForm({ ...editCatForm, major: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium mb-1">子分類名稱</label>
+                  <input
+                    type="text"
+                    value={editCatForm.sub}
+                    onChange={(e) => setEditCatForm({ ...editCatForm, sub: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600 text-xs"
+                  />
+                </div>
+                <div className="flex justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setEditingCategory(null)}
+                    className="px-4 py-2 rounded-xl bg-latte-100 dark:bg-neutral-700 text-xs font-semibold"
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded-xl bg-latte-600 hover:bg-latte-700 text-white text-xs font-semibold"
+                  >
+                    儲存變更
+                  </button>
+                </div>
+              </form>
             </div>
-          </div>
+          )}
 
           <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-4">
             <h3 className="font-bold text-base">自訂收支分類（目前帳本）</h3>
@@ -1910,6 +2092,45 @@
     function App() {
       const [toastMsg, setToastMsg] = useState('');
       const [dialogState, setDialogState] = useState(null);
+      const [deferredPrompt, setDeferredPrompt] = useState(null);
+      const [isStandalone, setIsStandalone] = useState(false);
+
+      useEffect(() => {
+        const standaloneCheck = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+        setIsStandalone(standaloneCheck);
+
+        const handleBeforeInstallPrompt = (e) => {
+          e.preventDefault();
+          setDeferredPrompt(e);
+        };
+        window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+        window.addEventListener('appinstalled', () => {
+          setDeferredPrompt(null);
+          setIsStandalone(true);
+          showToast('已成功安裝「暖心記帳」到桌面！');
+        });
+        return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      }, []);
+
+      async function handleInstallApp() {
+        if (deferredPrompt) {
+          deferredPrompt.prompt();
+          const { outcome } = await deferredPrompt.userChoice;
+          if (outcome === 'accepted') {
+            setDeferredPrompt(null);
+          }
+        } else {
+          const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+          setDialogState({
+            mode: 'alert',
+            title: '如何將「暖心記帳」安裝到手機桌面？',
+            message: isIOS
+              ? '【iPhone / iPad Safari 安裝步驟】\n1. 點擊瀏覽器底部正中央的「分享」按鈕（方框帶向上箭頭圖示）。\n2. 往下滑動選單，點擊「加入主畫面」。\n3. 點擊右上角「新增」即可在桌面看到專屬圖示！'
+              : '【Android / Chrome 安裝步驟】\n1. 點擊瀏覽器右上角的「⋮」（三個點選單）。\n2. 點擊「安裝應用程式」或「加到主畫面」。\n3. 確認安裝後即可在手機桌面獨立開啟！\n\n（註：請確認網站已部署於 HTTPS 網址，且專案資料夾內包含 icon.svg、manifest.json 與 sw.js）',
+            confirmText: '我知道了',
+          });
+        }
+      }
 
       function showToast(msg) {
         setToastMsg(msg);
@@ -2120,7 +2341,9 @@
         const unsubCat = db.collection('categories')
           .where('ledger_id', '==', activeLedgerId)
           .onSnapshot((snap) => {
-            setCategories(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+            const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+            list.sort((a, b) => (a.sort_order ?? 9999) - (b.sort_order ?? 9999));
+            setCategories(list);
           });
 
         const unsubPm = db.collection('payment_methods')
@@ -2211,6 +2434,15 @@
               </div>
 
               <div className="flex items-center gap-2">
+                {!isStandalone && (
+                  <button
+                    type="button"
+                    onClick={handleInstallApp}
+                    className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-latte-600 text-white hover:bg-latte-700 transition"
+                  >
+                    下載 App
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setConfigModalOpen(true)}
@@ -2511,6 +2743,9 @@
                 showToast={showToast}
                 askConfirm={askConfirm}
                 askPrompt={askPrompt}
+                deferredPrompt={deferredPrompt}
+                onInstallApp={handleInstallApp}
+                isStandalone={isStandalone}
               />
             )}
           </main>
