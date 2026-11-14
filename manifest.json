@@ -1,6 +1,6 @@
 {
-  "name": "暖心日常記帳本 - 個人與情侶共同記帳",
-  "short_name": "暖心記帳",
+  "name": "日常記帳本 - 個人與情侶共同記帳",
+  "short_name": "小新口袋",
   "description": "個人與情侶共同記帳系統，簡單直覺的日常收支與預算管理。",
   "start_url": "./index.html",
   "scope": "./",
