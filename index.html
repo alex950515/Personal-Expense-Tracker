@@ -96,6 +96,42 @@
       }
     }
 
+    class ErrorBoundary extends React.Component {
+      constructor(props) {
+        super(props);
+        this.state = { hasError: false, error: null };
+      }
+      static getDerivedStateFromError(error) {
+        return { hasError: true, error };
+      }
+      componentDidCatch(error, errorInfo) {
+        console.error("ErrorBoundary caught an error:", error, errorInfo);
+      }
+      render() {
+        if (this.state.hasError) {
+          return (
+            <div className="min-h-screen flex items-center justify-center p-6 bg-latte-50 dark:bg-neutral-900 text-latte-900 dark:text-latte-100">
+              <div className="max-w-md w-full bg-white dark:bg-neutral-800 p-6 rounded-3xl shadow-xl border border-rose-200 dark:border-rose-900 space-y-4 text-center">
+                <div className="w-12 h-12 mx-auto rounded-full bg-rose-100 text-rose-600 flex items-center justify-center font-bold text-xl">!</div>
+                <h2 className="text-lg font-bold">系統發生預期外的錯誤</h2>
+                <p className="text-xs text-latte-600 dark:text-neutral-400 break-words font-mono bg-latte-50 dark:bg-neutral-900 p-3 rounded-xl text-left">
+                  {this.state.error?.toString()}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => { localStorage.clear(); window.location.reload(); }}
+                  className="w-full py-3 rounded-xl bg-latte-700 hover:bg-latte-800 text-white font-semibold text-xs transition"
+                >
+                  清除快取並重新載入
+                </button>
+              </div>
+            </div>
+          );
+        }
+        return this.props.children;
+      }
+    }
+
     function CustomModalDialog({ dialog, onClose }) {
       const [inputValue, setInputValue] = useState('');
 
@@ -217,6 +253,7 @@
               try {
                 await ensureUserInitialized(u);
               } catch (e) {
+                console.error("Init error:", e);
                 setAuthError('初始化個人資料失敗：' + e.message);
               }
             }
@@ -233,20 +270,19 @@
         const db = firebase.firestore();
         const profileRef = db.collection('profiles').doc(u.uid);
         const profileSnap = await profileRef.get();
-        const defaultNickname = u.displayName || u.email.split('@')[0];
+        const defaultNickname = u.displayName || (u.email ? u.email.split('@')[0] : '使用者');
 
         if (!profileSnap.exists) {
           await profileRef.set({
             uid: u.uid,
-            email: u.email,
+            email: u.email || '',
             nickname: defaultNickname,
             created_at: firebase.firestore.FieldValue.serverTimestamp(),
           });
         }
 
         const ledgersSnap = await db.collection('ledgers')
-          .where('owner_id', '==', u.uid)
-          .where('type', '==', 'personal')
+          .where('memberIds', 'array-contains', u.uid)
           .get();
 
         if (ledgersSnap.empty) {
@@ -256,7 +292,7 @@
             type: 'personal',
             owner_id: u.uid,
             memberIds: [u.uid],
-            members: { [u.uid]: { role: 'owner', email: u.email, nickname: defaultNickname } },
+            members: { [u.uid]: { role: 'owner', email: u.email || '', nickname: defaultNickname } },
             max_members: 1,
             currency: 'TWD',
             is_archived: false,
@@ -313,7 +349,7 @@
 
         const unsubProfile = db.collection('profiles').doc(user.uid).onSnapshot((doc) => {
           if (doc.exists) setProfile(doc.data());
-        });
+        }, (err) => console.error("Profile snapshot error:", err));
 
         const unsubLedgers = db.collection('ledgers')
           .where('memberIds', 'array-contains', user.uid)
@@ -325,14 +361,15 @@
               const personal = activeList.find((l) => l.type === 'personal');
               setActiveLedgerId(personal ? personal.id : activeList[0].id);
             }
-          });
+          }, (err) => console.error("Ledgers snapshot error:", err));
 
-        const unsubInvites = db.collection('ledger_invitations')
-          .where('invitee_email', '==', (user.email || '').toLowerCase())
+        const emailKey = (user.email || '').toLowerCase();
+        const unsubInvites = emailKey ? db.collection('ledger_invitations')
+          .where('invitee_email', '==', emailKey)
           .where('status', '==', 'pending')
           .onSnapshot((snap) => {
             setInvitations(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-          });
+          }, (err) => console.error("Invites snapshot error:", err)) : () => {};
 
         return () => {
           unsubProfile();
@@ -360,19 +397,19 @@
               return (b.created_ms || 0) - (a.created_ms || 0);
             });
             setTransactions(list);
-          });
+          }, (err) => console.error("Tx snapshot error:", err));
 
         const unsubCat = db.collection('categories')
           .where('ledger_id', '==', activeLedgerId)
           .onSnapshot((snap) => {
             setCategories(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-          });
+          }, (err) => console.error("Cat snapshot error:", err));
 
         const unsubPm = db.collection('payment_methods')
           .where('ledger_id', '==', activeLedgerId)
           .onSnapshot((snap) => {
             setPaymentMethods(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-          });
+          }, (err) => console.error("Pm snapshot error:", err));
 
         return () => {
           unsubTx();
@@ -387,7 +424,7 @@
         const budgetId = `${activeLedgerId}_${selectedMonth}`;
         const unsub = db.collection('budgets').doc(budgetId).onSnapshot((doc) => {
           setBudgetDoc(doc.exists ? doc.data() : { total: 0, majors: {}, subs: {} });
-        });
+        }, (err) => console.error("Budget snapshot error:", err));
         return () => unsub();
       }, [activeLedgerId, selectedMonth, fbReady]);
 
@@ -1077,44 +1114,55 @@
       const [itemName, setItemName] = useState(editingTx?.item_name || '');
       const [note, setNote] = useState(editingTx?.note || '');
 
-      const filteredCats = useMemo(() => categories.filter((c) => c.type === type && !c.is_archived), [categories, type]);
+      const filteredCats = useMemo(() => categories.filter((c) => c && c.type === type && !c.is_archived), [categories, type]);
       const majors = useMemo(() => [...new Set(filteredCats.map((c) => c.major))], [filteredCats]);
 
-      const [selectedMajor, setSelectedMajor] = useState(editingTx?.major_category || (majors.length > 0 ? majors[0] : ''));
-      const [selectedSubCat, setSelectedSubCat] = useState(editingTx ? { major: editingTx.major_category, sub: editingTx.sub_category, emoji: editingTx.emoji || '📝' } : null);
+      const [selectedMajor, setSelectedMajor] = useState(() => {
+        if (editingTx?.major_category) return editingTx.major_category;
+        return majors.length > 0 ? majors[0] : '';
+      });
+
+      const [selectedSubCat, setSelectedSubCat] = useState(() => {
+        if (editingTx) return { major: editingTx.major_category, sub: editingTx.sub_category, emoji: editingTx.emoji || '📝' };
+        if (filteredCats.length > 0) {
+          const first = filteredCats[0];
+          return { major: first.major, sub: first.sub, emoji: first.emoji || '📝' };
+        }
+        return null;
+      });
 
       useEffect(() => {
         if (majors.length > 0 && (!selectedMajor || !majors.includes(selectedMajor))) {
           setSelectedMajor(majors[0]);
         }
-      }, [type, majors]);
+      }, [majors]);
 
       useEffect(() => {
-        if (!selectedSubCat && majors.length > 0) {
-          const firstCat = filteredCats.find((c) => c.major === majors[0]);
-          if (firstCat) {
-            setSelectedSubCat({ major: firstCat.major, sub: firstCat.sub, emoji: firstCat.emoji || '📝' });
+        if (filteredCats.length > 0) {
+          const currentValid = filteredCats.some((c) => c.major === selectedSubCat?.major && c.sub === selectedSubCat?.sub);
+          if (!currentValid) {
+            const first = filteredCats.find((c) => c.major === selectedMajor) || filteredCats[0];
+            if (first) {
+              setSelectedSubCat({ major: first.major, sub: first.sub, emoji: first.emoji || '📝' });
+            }
           }
         }
-      }, [majors, filteredCats]);
+      }, [type, filteredCats, selectedMajor]);
 
       const currentMajorSubs = useMemo(() => {
         return filteredCats.filter((c) => c.major === selectedMajor);
       }, [filteredCats, selectedMajor]);
 
-      const activePms = useMemo(() => paymentMethods.filter((p) => p.is_active), [paymentMethods]);
-      const [paymentMethod, setPaymentMethod] = useState(editingTx?.payment_method || '');
-      const [saving, setSaving] = useState(false);
+      const activePms = useMemo(() => paymentMethods.filter((p) => p && p.is_active), [paymentMethods]);
+      const [paymentMethod, setPaymentMethod] = useState(() => {
+        if (editingTx?.payment_method) return editingTx.payment_method;
+        const defaultCash = activePms.find((p) => p.name === '現金');
+        return defaultCash ? defaultCash.name : (activePms[0]?.name || '現金');
+      });
 
+      const [saving, setSaving] = useState(false);
       const [dateModalOpen, setDateModalOpen] = useState(false);
       const [pmModalOpen, setPmModalOpen] = useState(false);
-
-      useEffect(() => {
-        if (activePms.length > 0 && !activePms.some((p) => p.name === paymentMethod)) {
-          const defaultCash = activePms.find((p) => p.name === '現金');
-          setPaymentMethod(defaultCash ? defaultCash.name : activePms[0].name);
-        }
-      }, [activePms]);
 
       function handleKeyPress(val) {
         if (val === 'AC') {
@@ -1206,7 +1254,7 @@
               note: note.trim(),
               payment_method: paymentMethod,
               payer_id: user.uid,
-              payer_nickname: profile?.nickname || user.email.split('@')[0],
+              payer_nickname: profile?.nickname || (user.email ? user.email.split('@')[0] : '成員'),
               created_ms: Date.now(),
             });
             showToast('已新增交易紀錄');
@@ -1214,7 +1262,6 @@
           onClose();
         } catch (err) {
           showToast('儲存失敗：' + err.message);
-        } finally {
           setSaving(false);
         }
       }
@@ -1581,7 +1628,7 @@
         }));
       };
 
-      const expenseCats = useMemo(() => categories.filter((c) => c.type === 'expense' && !c.is_archived), [categories]);
+      const expenseCats = useMemo(() => categories.filter((c) => c && c.type === 'expense' && !c.is_archived), [categories]);
       const majors = useMemo(() => [...new Set(expenseCats.map((c) => c.major))], [expenseCats]);
 
       const actualTotal = useMemo(() => transactions.reduce((acc, t) => acc + (Number(t.amount) || 0), 0), [transactions]);
@@ -1792,14 +1839,14 @@
         try {
           const db = firebase.firestore();
           const ledgerRef = db.collection('ledgers').doc();
-          const myNick = profile?.nickname || user.email.split('@')[0];
+          const myNick = profile?.nickname || (user.email ? user.email.split('@')[0] : '擁有者');
 
           await ledgerRef.set({
             name: newCoupleLedgerName.trim(),
             type: 'couple',
             owner_id: user.uid,
             memberIds: [user.uid],
-            members: { [user.uid]: { role: 'owner', email: user.email, nickname: myNick } },
+            members: { [user.uid]: { role: 'owner', email: user.email || '', nickname: myNick } },
             max_members: 5,
             currency: 'TWD',
             is_archived: false,
@@ -1878,10 +1925,10 @@
             showToast('此共同帳本成員已滿 5 人上限');
             return;
           }
-          const myNick = profile?.nickname || user.email.split('@')[0];
+          const myNick = profile?.nickname || (user.email ? user.email.split('@')[0] : '成員');
           await ledgerRef.update({
             memberIds: firebase.firestore.FieldValue.arrayUnion(user.uid),
-            [`members.${user.uid}`]: { role: 'member', email: user.email, nickname: myNick },
+            [`members.${user.uid}`]: { role: 'member', email: user.email || '', nickname: myNick },
           });
           await db.collection('ledger_invitations').doc(inv.id).update({ status: 'accepted' });
           setActiveLedgerId(inv.ledger_id);
@@ -2232,7 +2279,7 @@
                 <div key={pm.id} className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs border ${!pm.is_active ? 'opacity-50' : ''}`}>
                   <span>{pm.name}</span>
                   <button type="button" onClick={() => togglePaymentMethodActive(pm)} className="text-xs text-latte-500 hover:underline">
-                    {pm.is_active ? '停用' : '啟用'}
+                    {pm.is_active ? '停,用' : '啟用'}
                   </button>
                 </div>
               ))}
@@ -2250,7 +2297,11 @@
     }
 
     const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<App />);
+    root.render(
+      <ErrorBoundary>
+        <App />
+      </ErrorBoundary>
+    );
   </script>
 </body>
 </html>
