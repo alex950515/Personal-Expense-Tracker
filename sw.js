@@ -1,10 +1,11 @@
-const CACHE_NAME = '20261114';
+const CACHE_NAME = 'warm-ledger-20261114-v2';
 
 // 需要快取的核心靜態資源
 const CORE_ASSETS = [
   './',
   './index.html',
   './manifest.json',
+  './icon.png',
   'https://cdn.tailwindcss.com',
   'https://unpkg.com/react@18/umd/react.production.min.js',
   'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js',
@@ -57,7 +58,6 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(event.request)
       .then((networkResponse) => {
-        // 僅快取成功的同源或 CDN 靜態回應
         if (networkResponse && networkResponse.status === 200) {
           const responseClone = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => {
@@ -67,7 +67,6 @@ self.addEventListener('fetch', (event) => {
         return networkResponse;
       })
       .catch(() => {
-        // 離線狀態時從快取讀取
         return caches.match(event.request);
       })
   );
