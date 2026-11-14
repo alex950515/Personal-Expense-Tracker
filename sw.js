@@ -1,4 +1,4 @@
-const CACHE_NAME = 'latte-expense-tracker-v1';
+const CACHE_NAME = '20261114';
 
 // 需要快取的核心靜態資源
 const CORE_ASSETS = [
