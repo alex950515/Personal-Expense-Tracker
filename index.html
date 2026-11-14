@@ -781,8 +781,8 @@
             )}
           </main>
 
-          {/* 手機版底部導覽列（加高兩倍，大幅提升觸控便利性） */}
-          <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md border-t border-latte-200/80 dark:border-neutral-800 grid grid-cols-5 py-3 px-2 text-xs items-center shadow-lg min-h-[72px]">
+          {/* 手機版底部導覽列（加高放大兩倍，大幅提升觸控便利性） */}
+          <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md border-t border-latte-200/80 dark:border-neutral-800 grid grid-cols-5 py-3 px-2 text-xs items-center shadow-lg min-h-[76px]">
             <button
               onClick={() => setActiveTab('home')}
               className={`flex flex-col items-center justify-center py-3 font-medium transition ${activeTab === 'home' ? 'text-latte-700 dark:text-latte-200 font-bold' : 'text-neutral-400 dark:text-neutral-500'}`}
@@ -796,7 +796,7 @@
               <span className="text-sm sm:text-base">統計</span>
             </button>
             
-            {/* 手機版置中特大顯眼的「+ 記帳」按鈕（加高放大兩倍） */}
+            {/* 手機版置中特大顯眼的「+ 記帳」按鈕（加高放大兩倍，絕不換行） */}
             <div className="flex justify-center">
               <button
                 type="button"
