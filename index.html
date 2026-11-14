@@ -626,7 +626,7 @@
                 <select
                   value={activeLedgerId}
                   onChange={(e) => setActiveLedgerId(e.target.value)}
-                  className="w-full p-3 rounded-xl bg-white dark:bg-neutral-700 border border-latte-300 dark:border-neutral-600 font-semibold text-base"
+                  className="w-full p-2.5 rounded-xl bg-white dark:bg-neutral-700 border border-latte-300 dark:border-neutral-600 font-semibold text-sm"
                 >
                   {activeLedgers.map((l) => (
                     <option key={l.id} value={l.id}>
@@ -667,12 +667,12 @@
             </div>
           </aside>
 
-          {/* 手機版頂部帳本切換列 (無「+ 記一筆」按鈕) */}
-          <header className="md:hidden sticky top-0 z-20 bg-latte-100/95 dark:bg-neutral-800/95 backdrop-blur border-b border-latte-200 dark:border-neutral-700 px-4 py-3 flex items-center justify-between gap-2">
+          {/* 手機版頂部帳本切換列 (已縮小尺寸) */}
+          <header className="md:hidden sticky top-0 z-20 bg-latte-100/95 dark:bg-neutral-800/95 backdrop-blur border-b border-latte-200 dark:border-neutral-700 px-3 py-2 flex items-center justify-center">
             <select
               value={activeLedgerId}
               onChange={(e) => setActiveLedgerId(e.target.value)}
-              className="w-full p-2.5 rounded-xl bg-white dark:bg-neutral-700 border border-latte-300 dark:border-neutral-600 font-semibold text-base"
+              className="w-auto min-w-[180px] max-w-[260px] px-3 py-1.5 rounded-lg bg-white dark:bg-neutral-700 border border-latte-300 dark:border-neutral-600 font-semibold text-xs"
             >
               {activeLedgers.length === 0 && <option value="">尚無啟用中的帳本</option>}
               {activeLedgers.map((l) => (
@@ -779,7 +779,7 @@
             )}
           </main>
 
-          {/* 手機版底部導覽列（項目放大一倍，且中央加入「記帳」按鈕） */}
+          {/* 手機版底部導覽列（項目放大一倍，且中央加入更大且明顯的「記帳」按鈕） */}
           <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 dark:bg-neutral-800/95 backdrop-blur border-t border-latte-200 dark:border-neutral-700 grid grid-cols-5 py-3 text-sm items-center">
             <button
               onClick={() => setActiveTab('home')}
@@ -794,7 +794,7 @@
               <span className="text-base py-1">統計</span>
             </button>
             
-            {/* 手機版置中「記帳」按鈕 */}
+            {/* 手機版置中放大「記帳」按鈕 */}
             <div className="flex justify-center">
               <button
                 type="button"
@@ -806,7 +806,7 @@
                   setEditingTx(null);
                   setTxModalOpen(true);
                 }}
-                className="w-12 h-12 rounded-full bg-latte-600 hover:bg-latte-700 text-white font-bold text-sm shadow-md flex items-center justify-center -mt-3 border-4 border-white dark:border-neutral-800"
+                className="w-14 h-14 rounded-full bg-latte-600 hover:bg-latte-700 text-white font-bold text-base shadow-lg flex items-center justify-center -mt-4 border-4 border-white dark:border-neutral-800 transition transform active:scale-95"
                 title="記帳"
               >
                 記帳
@@ -1298,7 +1298,7 @@
       const [totalInput, setTotalInput] = useState(0);
       const [majorsInput, setMajorsInput] = useState({});
       const [subsInput, setSubsInput] = useState({});
-      const [expandedMajors, setExpandedMajors] = useState({}); // 預設全部為 false (摺疊)
+      const [expandedMajors, setExpandedMajors] = useState({});
 
       useEffect(() => {
         if (budgetDoc) {
@@ -1704,6 +1704,61 @@
         }
       }
 
+      async function addCategory(e) {
+        e.preventDefault();
+        if (!catMajor.trim() || !catSub.trim()) {
+          showToast('請完整輸入大分類與子分類名稱');
+          return;
+        }
+        try {
+          await firebase.firestore().collection('categories').add({
+            ledger_id: activeLedger.id,
+            type: catType,
+            major: catMajor.trim(),
+            sub: catSub.trim(),
+            is_archived: false,
+          });
+          setCatSub('');
+          showToast('已新增自訂分類');
+        } catch (err) {
+          showToast('新增分類失敗：' + err.message);
+        }
+      }
+
+      async function toggleArchiveCategory(cat) {
+        try {
+          await firebase.firestore().collection('categories').doc(cat.id).update({ is_archived: !cat.is_archived });
+          showToast('分類狀態已更新');
+        } catch (err) {
+          showToast('更新失敗：' + err.message);
+        }
+      }
+
+      async function addPaymentMethod(e) {
+        e.preventDefault();
+        if (!newPmName.trim()) return;
+        try {
+          await firebase.firestore().collection('payment_methods').add({
+            ledger_id: activeLedger.id,
+            name: newPmName.trim(),
+            is_active: true,
+          });
+          setNewPmName('');
+          showToast('已新增付款方式');
+        } catch (err) {
+          showToast('新增付款方式失敗：' + err.message);
+        }
+      }
+
+      async function togglePaymentMethodActive(pm) {
+        try {
+          await firebase.firestore().collection('payment_methods').doc(pm.id).update({ is_active: !pm.is_active });
+          showToast('付款方式狀態已更新');
+        } catch (err) {
+          showToast('更新失敗：' + err.message);
+        }
+      }
+
       return (
         <div className="space-y-6 text-sm">
           {invitations.length > 0 && (
@@ -1834,6 +1889,68 @@
                       </button>
                     </div>
                   )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 自訂收支分類與付款方式管理 (恢復呈現) */}
+          <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-4">
+            <h3 className="font-bold text-base">自訂收支分類（目前帳本）</h3>
+            <form onSubmit={addCategory} className="flex flex-wrap gap-2">
+              <select
+                value={catType}
+                onChange={(e) => setCatType(e.target.value)}
+                className="p-2.5 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600 text-xs"
+              >
+                <option value="expense">支出</option>
+                <option value="income">收入</option>
+              </select>
+              <input
+                type="text"
+                placeholder="大分類名稱"
+                value={catMajor}
+                onChange={(e) => setCatMajor(e.target.value)}
+                className="flex-1 min-w-[110px] p-2.5 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600 text-xs"
+              />
+              <input
+                type="text"
+                placeholder="子分類名稱"
+                value={catSub}
+                onChange={(e) => setCatSub(e.target.value)}
+                className="flex-1 min-w-[110px] p-2.5 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600 text-xs"
+              />
+              <button type="submit" className="px-4 py-2.5 rounded-xl bg-latte-600 text-white font-semibold text-xs">新增分類</button>
+            </form>
+            <div className="flex flex-wrap gap-2 pt-2">
+              {categories.map((c) => (
+                <div key={c.id} className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs border ${c.is_archived ? 'bg-neutral-100 dark:bg-neutral-700 opacity-50' : 'bg-latte-50 dark:bg-neutral-700/50'}`}>
+                  <span>{c.type === 'income' ? '收' : '支'} | {c.major} / {c.sub}</span>
+                  <button type="button" onClick={() => toggleArchiveCategory(c)} className="text-rose-500 hover:font-bold ml-1">×</button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-4">
+            <h3 className="font-bold text-base">付款方式管理（目前帳本）</h3>
+            <form onSubmit={addPaymentMethod} className="flex gap-2">
+              <input
+                type="text"
+                placeholder="新增付款方式（如：悠遊卡、街口支付）"
+                value={newPmName}
+                onChange={(e) => setNewPmName(e.target.value)}
+                className="flex-1 p-2.5 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600 text-xs"
+              />
+              <button type="submit" className="px-4 py-2.5 rounded-xl bg-latte-600 text-white font-semibold text-xs">新增</button>
+            </form>
+            <div className="flex flex-wrap gap-2 pt-2">
+              {paymentMethods.map((pm) => (
+                <div key={pm.id} className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs border ${!pm.is_active ? 'opacity-50' : ''}`}>
+                  <span>{pm.name}</span>
+                  <button type="button" onClick={() => togglePaymentMethodActive(pm)} className="text-xs text-latte-500 hover:underline">
+                    {pm.is_active ? '停用' : '啟用'}
+                  </button>
                 </div>
               ))}
             </div>
