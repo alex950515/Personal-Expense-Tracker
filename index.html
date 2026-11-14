@@ -187,8 +187,8 @@
       if (!dialog) return null;
 
       return (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-neutral-800 rounded-2xl max-w-md w-full p-6 shadow-xl border border-latte-200 dark:border-neutral-700 space-y-4">
+        <div className="fixed inset-0 z-[999] bg-black/55 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-neutral-800 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-latte-200 dark:border-neutral-700 space-y-4">
             <h3 className="font-bold text-lg text-latte-900 dark:text-white">{dialog.title}</h3>
             {dialog.message && (
               <p className="text-sm text-latte-700 dark:text-neutral-300 whitespace-pre-line leading-relaxed">
@@ -533,8 +533,8 @@
 
       return (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
-          {/* 固定視窗高度，不隨分類數量增減而縮放跳動 */}
-          <div className="bg-white dark:bg-neutral-900 rounded-t-3xl sm:rounded-3xl max-w-lg w-full h-[610px] max-h-[95vh] p-4 sm:p-5 flex flex-col justify-between shadow-2xl overflow-hidden">
+          {/* 固定視窗高度，加高並為鍵盤保留更寬敞的操作空間 */}
+          <div className="bg-white dark:bg-neutral-900 rounded-t-3xl sm:rounded-3xl max-w-lg w-full h-[685px] max-h-[96vh] p-4 sm:p-5 flex flex-col justify-between shadow-2xl overflow-hidden">
             
             <div className="flex justify-between items-center shrink-0">
               <span className="text-sm font-bold text-latte-800 dark:text-latte-100">{editingTx ? '編輯收支紀錄' : '新增收支紀錄'}</span>
@@ -542,8 +542,8 @@
             </div>
 
             {/* 類別選擇區塊：固定高度，內部上下滾動查看，不影響整體視窗大小 */}
-            <div className="bg-latte-50 dark:bg-neutral-800/50 p-2.5 rounded-2xl space-y-2 shrink-0">
-              <div className="flex items-center justify-between">
+            <div className="bg-latte-50 dark:bg-neutral-800/50 p-2 rounded-2xl space-y-1.5 shrink-0">
+              <div className="flex items-center justify-between px-0.5">
                 <span className="text-xs font-bold text-latte-600 dark:text-neutral-400">選擇記帳分類</span>
                 {selectedSubCat && (
                   <span className="text-xs font-bold text-latte-900 dark:text-white bg-white dark:bg-neutral-700 px-2.5 py-0.5 rounded-full shadow-2xs border border-latte-200 dark:border-neutral-600 truncate max-w-[200px]">
@@ -552,8 +552,8 @@
                 )}
               </div>
 
-              {/* 大分類列表：固定高度 h-[74px]，支援上下滾動 */}
-              <div className="h-[74px] overflow-y-auto no-scrollbar flex flex-wrap content-start gap-1.5 p-1 bg-white/60 dark:bg-neutral-900/40 rounded-xl border border-latte-200/60 dark:border-neutral-700/60">
+              {/* 大分類列表：固定高度 h-[66px]，支援上下滾動 */}
+              <div className="h-[66px] overflow-y-auto no-scrollbar flex flex-wrap content-start gap-1.5 p-1 bg-white/60 dark:bg-neutral-900/40 rounded-xl border border-latte-200/60 dark:border-neutral-700/60">
                 {majors.map((m) => (
                   <button
                     key={m}
@@ -570,8 +570,8 @@
                 ))}
               </div>
 
-              {/* 子分類網格：固定高度 h-[92px]，支援上下滾動 */}
-              <div className="h-[92px] overflow-y-auto no-scrollbar grid grid-cols-3 content-start gap-1.5 p-1 bg-white/60 dark:bg-neutral-900/40 rounded-xl border border-latte-200/60 dark:border-neutral-700/60">
+              {/* 子分類網格：固定高度 h-[84px]，支援上下滾動 */}
+              <div className="h-[84px] overflow-y-auto no-scrollbar grid grid-cols-3 content-start gap-1.5 p-1 bg-white/60 dark:bg-neutral-900/40 rounded-xl border border-latte-200/60 dark:border-neutral-700/60">
                 {currentMajorSubs.map((c) => {
                   const isSelected = selectedSubCat?.major === c.major && selectedSubCat?.sub === c.sub;
                   return (
@@ -579,7 +579,7 @@
                       key={c.id || c.sub}
                       type="button"
                       onClick={() => setSelectedSubCat({ major: c.major, sub: c.sub, emoji: c.emoji || '📝' })}
-                      className={`flex items-center gap-1.5 p-2 rounded-xl border transition text-left ${
+                      className={`flex items-center gap-1.5 p-1.5 rounded-xl border transition text-left ${
                         isSelected
                           ? 'border-latte-600 bg-white dark:bg-neutral-700 ring-2 ring-latte-600/30 font-bold'
                           : 'border-latte-200 dark:border-neutral-700 bg-white/80 dark:bg-neutral-800 hover:bg-white'
@@ -600,19 +600,19 @@
                 value={itemName}
                 onChange={(e) => setItemName(e.target.value)}
                 placeholder="項目名稱 (選填)"
-                className="p-2.5 rounded-xl border border-latte-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-xs"
+                className="p-2 rounded-xl border border-latte-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-xs"
               />
               <input
                 type="text"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 placeholder="備註 (選填)"
-                className="p-2.5 rounded-xl border border-latte-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-xs"
+                className="p-2 rounded-xl border border-latte-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-xs"
               />
             </div>
 
             {/* 金額顯示與支出/收入按鈕並排 */}
-            <div className="bg-latte-100/70 dark:bg-neutral-800 px-3.5 py-2.5 rounded-2xl flex items-center justify-between border border-latte-200 dark:border-neutral-700 shrink-0">
+            <div className="bg-latte-100/70 dark:bg-neutral-800 px-3.5 py-2 rounded-2xl flex items-center justify-between border border-latte-200 dark:border-neutral-700 shrink-0">
               <div className="min-w-0">
                 <span className="text-[11px] text-latte-500 block">輸入金額</span>
                 <div className="text-2xl sm:text-3xl font-extrabold text-latte-900 dark:text-white truncate tracking-tight">
@@ -637,8 +637,8 @@
               </div>
             </div>
 
-            {/* 4x4 數字鍵盤（AC 與 ⌫ 位置已對調，並移除最下方運算符列） */}
-            <div className="grid grid-cols-4 gap-1.5 shrink-0">
+            {/* 加大寬敞版 4x4 數字鍵盤（按鍵更大、間距更舒適） */}
+            <div className="flex-1 grid grid-cols-4 grid-rows-4 gap-2 pt-1 min-h-[245px]">
               {[
                 ['1', '2', '3'],
                 ['4', '5', '6'],
@@ -651,7 +651,7 @@
                       key={btn}
                       type="button"
                       onClick={() => handleKeyPress(btn)}
-                      className="py-3.5 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-200 dark:hover:bg-neutral-700 text-latte-900 dark:text-white font-bold text-base shadow-2xs border border-latte-200/80 dark:border-neutral-700 transition active:scale-95"
+                      className="h-full w-full rounded-2xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-200 dark:hover:bg-neutral-700 text-latte-900 dark:text-white font-bold text-xl shadow-2xs border border-latte-200/80 dark:border-neutral-700 transition active:scale-95 flex items-center justify-center touch-manipulation"
                     >
                       {btn}
                     </button>
@@ -660,18 +660,18 @@
                     <button
                       type="button"
                       onClick={() => setPmModalOpen(true)}
-                      className="py-3 px-1 rounded-xl bg-latte-200/80 dark:bg-neutral-700 text-latte-800 dark:text-neutral-100 font-bold text-xs shadow-2xs transition active:scale-95 flex flex-col items-center justify-center leading-tight border border-latte-300 dark:border-neutral-600"
+                      className="h-full w-full px-1 rounded-2xl bg-latte-200/80 dark:bg-neutral-700 text-latte-800 dark:text-neutral-100 font-bold text-xs sm:text-sm shadow-2xs transition active:scale-95 flex flex-col items-center justify-center leading-tight border border-latte-300 dark:border-neutral-600 touch-manipulation"
                     >
                       <span>付款方式</span>
-                      <span className="text-[10px] font-normal truncate max-w-full">{paymentMethod || '現金'}</span>
+                      <span className="text-[11px] font-normal truncate max-w-full mt-0.5">{paymentMethod || '現金'}</span>
                     </button>
                   )}
                   {rIdx === 1 && (
-                    <div className="grid grid-cols-2 gap-1">
+                    <div className="h-full w-full grid grid-cols-2 gap-1.5">
                       <button
                         type="button"
                         onClick={() => handleKeyPress('backspace')}
-                        className="py-3.5 rounded-xl bg-latte-100 dark:bg-neutral-800 text-latte-800 dark:text-neutral-200 font-bold text-sm shadow-2xs border border-latte-200 dark:border-neutral-700 transition active:scale-95"
+                        className="h-full w-full rounded-2xl bg-latte-100 dark:bg-neutral-800 text-latte-800 dark:text-neutral-200 font-bold text-base shadow-2xs border border-latte-200 dark:border-neutral-700 transition active:scale-95 flex items-center justify-center touch-manipulation"
                         title="倒退刪除"
                       >
                         ⌫
@@ -679,7 +679,7 @@
                       <button
                         type="button"
                         onClick={() => handleKeyPress('AC')}
-                        className="py-3.5 rounded-xl bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 font-bold text-xs border border-amber-200 dark:border-amber-800 shadow-2xs transition active:scale-95"
+                        className="h-full w-full rounded-2xl bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 font-bold text-xs sm:text-sm border border-amber-200 dark:border-amber-800 shadow-2xs transition active:scale-95 flex items-center justify-center touch-manipulation"
                         title="全部清除"
                       >
                         AC
@@ -690,10 +690,10 @@
                     <button
                       type="button"
                       onClick={() => setDateModalOpen(true)}
-                      className="py-3 px-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-2xs transition active:scale-95 flex flex-col items-center justify-center leading-tight"
+                      className="h-full w-full px-1 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm shadow-2xs transition active:scale-95 flex flex-col items-center justify-center leading-tight touch-manipulation"
                     >
                       <span>日期</span>
-                      <span className="text-[10px] font-normal opacity-90 truncate max-w-full">{date}</span>
+                      <span className="text-[11px] font-normal opacity-95 truncate max-w-full mt-0.5">{date}</span>
                     </button>
                   )}
                   {rIdx === 3 && (
@@ -701,9 +701,9 @@
                       type="button"
                       onClick={() => handleSubmit()}
                       disabled={saving}
-                      className="py-3.5 rounded-xl bg-latte-700 hover:bg-latte-800 text-white font-bold text-sm shadow-md transition active:scale-95"
+                      className="h-full w-full rounded-2xl bg-latte-700 hover:bg-latte-800 text-white font-bold text-base shadow-md transition active:scale-95 flex items-center justify-center touch-manipulation"
                     >
-                      {saving ? '儲存' : '確定'}
+                      {saving ? '儲存中' : '確定'}
                     </button>
                   )}
                 </React.Fragment>
@@ -2216,7 +2216,7 @@
       return (
         <div className="min-h-screen flex flex-col md:flex-row pb-36 md:pb-0">
           {toastMsg && (
-            <div className="fixed top-4 right-4 z-50 px-4 py-2.5 rounded-xl bg-latte-800 text-white text-sm shadow-lg">
+            <div className="fixed top-4 left-1/2 -translate-x-1/2 sm:left-auto sm:translate-x-0 sm:right-4 z-[999] px-5 py-3 rounded-2xl bg-latte-800 text-white text-sm font-semibold shadow-2xl border border-latte-600/50 pointer-events-none">
               {toastMsg}
             </div>
           )}
