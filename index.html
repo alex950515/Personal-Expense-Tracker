@@ -1073,7 +1073,7 @@
 
     function TransactionModal({ user, profile, activeLedger, categories, paymentMethods, editingTx, showToast, onClose }) {
       const [type, setType] = useState(editingTx?.type || 'expense');
-      const [amount, setAmount] = useState(editingTx?.amount || '');
+      const [amountStr, setAmountStr] = useState(editingTx ? String(editingTx.amount) : '0');
       const [date, setDate] = useState(editingTx?.date || getTodayStr());
       const [itemName, setItemName] = useState(editingTx?.item_name || '');
       const [note, setNote] = useState(editingTx?.note || '');
@@ -1081,7 +1081,7 @@
       const filteredCats = useMemo(() => categories.filter((c) => c.type === type && !c.is_archived), [categories, type]);
       const majors = useMemo(() => [...new Set(filteredCats.map((c) => c.major))], [filteredCats]);
 
-      const [selectedMajor, setSelectedMajor] = useState(editingTx?.major_category || '');
+      const [selectedMajor, setSelectedMajor] = useState(editingTx?.major_category || (majors.length > 0 ? majors[0] : ''));
       const [selectedSubCat, setSelectedSubCat] = useState(editingTx ? { major: editingTx.major_category, sub: editingTx.sub_category, emoji: editingTx.emoji || '📝' } : null);
 
       useEffect(() => {
@@ -1106,6 +1106,7 @@
       const activePms = useMemo(() => paymentMethods.filter((p) => p.is_active), [paymentMethods]);
       const [paymentMethod, setPaymentMethod] = useState(editingTx?.payment_method || '');
       const [saving, setSaving] = useState(false);
+      const [showCategoryPicker, setShowCategoryPicker] = useState(!editingTx); // 預設一開始先選分類
 
       useEffect(() => {
         if (activePms.length > 0 && !activePms.some((p) => p.name === paymentMethod)) {
@@ -1114,9 +1115,60 @@
         }
       }, [activePms]);
 
-      async function handleSubmit(e) {
-        e.preventDefault();
-        if (!amount || Number(amount) <= 0) {
+      // 數字鍵盤按鍵處理 (支援計算機加減乘除)
+      function handleKeyPress(val) {
+        if (val === 'AC') {
+          setAmountStr('0');
+          return;
+        }
+        if (val === 'backspace') {
+          setAmountStr((prev) => (prev.length > 1 ? prev.slice(0, -1) : '0'));
+          return;
+        }
+        if (val === '=') {
+          try {
+            // 安全計算簡單算式
+            const sanitized = amountStr.replace(/×/g, '*').replace(/÷/g, '/');
+            const result = Function(`return ${sanitized}`)();
+            if (!isNaN(result) && isFinite(result)) {
+              setAmountStr(String(Number(result.toFixed(2))));
+            }
+          } catch (e) {
+            // ignore
+          }
+          return;
+        }
+        if (['+', '-', '×', '÷'].includes(val)) {
+          if (['+', '-', '×', '÷'].some((op) => amountStr.endsWith(op))) return;
+          setAmountStr((prev) => prev + val);
+          return;
+        }
+        if (val === '.') {
+          const parts = amountStr.split(/[\+\-×÷]/);
+          const currentPart = parts[parts.length - 1];
+          if (currentPart.includes('.')) return;
+          setAmountStr((prev) => prev + '.');
+          return;
+        }
+        // 數字 0-9 或 00
+        setAmountStr((prev) => {
+          if (prev === '0' && val !== '00') return val;
+          if (prev === '0' && val === '00') return '0';
+          return prev + val;
+        });
+      }
+
+      async function handleSubmit() {
+        // 計算最終金額
+        let finalAmount = 0;
+        try {
+          const sanitized = amountStr.replace(/×/g, '*').replace(/÷/g, '/');
+          finalAmount = Number(Function(`return ${sanitized}`)());
+        } catch (e) {
+          finalAmount = Number(amountStr) || 0;
+        }
+
+        if (!finalAmount || finalAmount <= 0) {
           showToast('請輸入大於 0 的有效金額');
           return;
         }
@@ -1138,7 +1190,7 @@
           if (editingTx) {
             await db.collection('transactions').doc(editingTx.id).update({
               type,
-              amount: Number(amount),
+              amount: finalAmount,
               major_category: selectedSubCat.major,
               sub_category: selectedSubCat.sub,
               date,
@@ -1151,7 +1203,7 @@
             await db.collection('transactions').add({
               ledger_id: activeLedger.id,
               type,
-              amount: Number(amount),
+              amount: finalAmount,
               major_category: selectedSubCat.major,
               sub_category: selectedSubCat.sub,
               date,
@@ -1173,258 +1225,194 @@
       }
 
       return (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <form onSubmit={handleSubmit} noValidate className="bg-white dark:bg-neutral-800 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-xl max-h-[92vh] overflow-y-auto">
-            <div className="flex justify-between items-center">
-              <h2 className="font-bold text-lg">{editingTx ? '編輯收支' : '新增收支'}</h2>
-              <button type="button" onClick={onClose} className="text-neutral-400 hover:text-neutral-600">✕</button>
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white dark:bg-neutral-900 rounded-t-3xl sm:rounded-3xl max-w-lg w-full p-4 sm:p-6 space-y-3 shadow-2xl max-h-[96vh] overflow-y-auto">
+            
+            {/* 頂部：點選添加備註 / 關閉按鈕 */}
+            <div className="flex justify-between items-center border-b border-latte-100 dark:border-neutral-800 pb-2">
+              <div className="flex items-center gap-2 flex-1">
+                <input
+                  type="text"
+                  value={itemName}
+                  onChange={(e) => setItemName(e.target.value)}
+                  placeholder="點選添加備註/項目名稱 📝"
+                  className="w-full bg-transparent text-xs sm:text-sm text-latte-800 dark:text-neutral-200 focus:outline-none placeholder:text-latte-400"
+                />
+              </div>
+              <button type="button" onClick={onClose} className="p-1.5 rounded-full text-neutral-400 hover:bg-latte-100 dark:hover:bg-neutral-800">✕</button>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-latte-100 dark:bg-neutral-700">
-              <button
-                type="button"
-                onClick={() => {
-                  setType('expense');
-                  setSelectedSubCat(null);
-                }}
-                className={`py-2 rounded-lg font-semibold text-sm transition ${type === 'expense' ? 'bg-rose-600 text-white' : 'text-latte-700 dark:text-neutral-300'}`}
-              >
-                支出
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setType('income');
-                  setSelectedSubCat(null);
-                }}
-                className={`py-2 rounded-lg font-semibold text-sm transition ${type === 'income' ? 'bg-emerald-600 text-white' : 'text-latte-700 dark:text-neutral-300'}`}
-              >
-                收入
-              </button>
-            </div>
+            {/* 如果正在選擇分類 */}
+            {showCategoryPicker ? (
+              <div className="space-y-4 py-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-sm text-latte-900 dark:text-white">請先選擇記帳分類</span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setType('expense')}
+                      className={`px-3 py-1 rounded-lg text-xs font-semibold ${type === 'expense' ? 'bg-rose-600 text-white' : 'bg-latte-100 dark:bg-neutral-800 text-latte-700 dark:text-neutral-300'}`}
+                    >
+                      支出
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setType('income')}
+                      className={`px-3 py-1 rounded-lg text-xs font-semibold ${type === 'income' ? 'bg-emerald-600 text-white' : 'bg-latte-100 dark:bg-neutral-800 text-latte-700 dark:text-neutral-300'}`}
+                    >
+                      收入
+                    </button>
+                  </div>
+                </div>
 
-            <div>
-              <label className="block text-xs font-medium mb-1">金額 *</label>
-              <input
-                type="number"
-                step="any"
-                min="0.01"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                className="w-full p-2.5 rounded-xl border border-latte-300 dark:border-neutral-600 dark:bg-neutral-700 text-lg font-bold"
-                placeholder="0"
-              />
-            </div>
-
-            {/* 大分類標籤列 */}
-            <div className="space-y-2">
-              <label className="block text-xs font-medium">選擇分類 *</label>
-              <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-                {majors.map((m) => {
-                  const isSelected = selectedMajor === m;
-                  return (
+                {/* 大分類標籤列 */}
+                <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+                  {majors.map((m) => (
                     <button
                       key={m}
                       type="button"
                       onClick={() => setSelectedMajor(m)}
                       className={`px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition ${
-                        isSelected
+                        selectedMajor === m
                           ? 'bg-latte-800 text-white shadow-xs dark:bg-neutral-100 dark:text-neutral-900'
-                          : 'bg-latte-100 dark:bg-neutral-700 text-latte-700 dark:text-neutral-300 hover:bg-latte-200'
+                          : 'bg-latte-100 dark:bg-neutral-800 text-latte-700 dark:text-neutral-300'
                       }`}
                     >
                       {m}
                     </button>
-                  );
-                })}
-              </div>
+                  ))}
+                </div>
 
-              {/* 子分類卡片網格 (模仿參考圖) */}
-              <div className="grid grid-cols-4 gap-2.5 pt-2 max-h-48 overflow-y-auto">
-                {currentMajorSubs.map((c) => {
-                  const isCatSelected = selectedSubCat?.major === c.major && selectedSubCat?.sub === c.sub;
-                  return (
+                {/* 子分類卡片網格 */}
+                <div className="grid grid-cols-4 gap-2.5 max-h-56 overflow-y-auto">
+                  {currentMajorSubs.map((c) => {
+                    const isCatSelected = selectedSubCat?.major === c.major && selectedSubCat?.sub === c.sub;
+                    return (
+                      <button
+                        key={c.id || c.sub}
+                        type="button"
+                        onClick={() => {
+                          setSelectedSubCat({ major: c.major, sub: c.sub, emoji: c.emoji || '📝' });
+                          setShowCategoryPicker(false); // 選好後進入數字輸入與鍵盤介面
+                        }}
+                        className={`flex flex-col items-center justify-center p-3 rounded-2xl border transition ${
+                          isCatSelected
+                            ? 'border-latte-600 bg-latte-50 dark:bg-neutral-800 ring-2 ring-latte-600/30'
+                            : 'border-latte-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 hover:border-latte-400'
+                        }`}
+                      >
+                        <span className="text-2xl mb-1">{c.emoji || '📝'}</span>
+                        <span className="text-xs font-semibold text-latte-800 dark:text-neutral-200 truncate w-full text-center">{c.sub}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              // 數字鍵盤與參考圖相同佈局
+              <div className="space-y-3">
+                {/* 頂部列：金額顯示與 支出/收入 切換、已選分類快速切換按鈕 */}
+                <div className="flex items-center justify-between bg-latte-50 dark:bg-neutral-800/60 p-3 rounded-2xl">
+                  <div className="flex items-center gap-2">
                     <button
-                      key={c.id || c.sub}
                       type="button"
-                      onClick={() => setSelectedSubCat({ major: c.major, sub: c.sub, emoji: c.emoji || '📝' })}
-                      className={`flex flex-col items-center justify-center p-3 rounded-2xl border transition ${
-                        isCatSelected
-                          ? 'border-latte-600 bg-latte-50 dark:bg-neutral-700 dark:border-latte-400 ring-2 ring-latte-600/30'
-                          : 'border-latte-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 hover:border-latte-400'
-                      }`}
+                      onClick={() => setShowCategoryPicker(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-neutral-700 border border-latte-200 dark:border-neutral-600 text-xs font-semibold shadow-2xs"
                     >
-                      <span className="text-2xl mb-1">{c.emoji || '📝'}</span>
-                      <span className="text-xs font-semibold text-latte-800 dark:text-neutral-200 truncate w-full text-center">{c.sub}</span>
+                      <span>{selectedSubCat?.emoji || '📝'}</span>
+                      <span>{selectedSubCat?.sub || '選擇分類'}</span>
+                      <span className="text-[10px] text-latte-400">▼</span>
                     </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium mb-1">日期 *</label>
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="w-full p-2.5 rounded-xl border border-latte-300 dark:border-neutral-600 dark:bg-neutral-700 text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium mb-1">付款方式 *</label>
-                <select
-                  value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
-                  className="w-full p-2.5 rounded-xl border border-latte-300 dark:border-neutral-600 dark:bg-neutral-700 text-sm"
-                >
-                  {activePms.length === 0 && <option value="">無可用付款方式</option>}
-                  {activePms.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium mb-1">項目名稱（選填）</label>
-              <input
-                type="text"
-                value={itemName}
-                onChange={(e) => setItemName(e.target.value)}
-                placeholder="例如：排骨便當、捷運悠遊卡"
-                className="w-full p-2.5 rounded-xl border border-latte-300 dark:border-neutral-600 dark:bg-neutral-700 text-sm"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium mb-1">備註（選填）</label>
-              <input
-                type="text"
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                className="w-full p-2.5 rounded-xl border border-latte-300 dark:border-neutral-600 dark:bg-neutral-700 text-sm"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={saving}
-              className="w-full py-3 rounded-xl bg-latte-600 hover:bg-latte-700 text-white font-semibold transition"
-            >
-              {saving ? '儲存中...' : '儲存紀錄'}
-            </button>
-          </form>
-        </div>
-      );
-    }
-
-    function StatsView({ activeLedger, currencySymbol, selectedMonth, setSelectedMonth, transactions }) {
-      const stats = useMemo(() => {
-        let incomeTotal = 0;
-        let expenseTotal = 0;
-        const expenseTree = {};
-        const incomeTree = {};
-        const memberPaid = {};
-
-        transactions.forEach((tx) => {
-          const amt = Number(tx.amount) || 0;
-          if (tx.type === 'income') {
-            incomeTotal += amt;
-            if (!incomeTree[tx.major_category]) incomeTree[tx.major_category] = { total: 0, subs: {} };
-            incomeTree[tx.major_category].total += amt;
-            incomeTree[tx.major_category].subs[tx.sub_category] = (incomeTree[tx.major_category].subs[tx.sub_category] || 0) + amt;
-          } else {
-            expenseTotal += amt;
-            if (!expenseTree[tx.major_category]) expenseTree[tx.major_category] = { total: 0, subs: {} };
-            expenseTree[tx.major_category].total += amt;
-            expenseTree[tx.major_category].subs[tx.sub_category] = (expenseTree[tx.major_category].subs[tx.sub_category] || 0) + amt;
-
-            if (activeLedger?.type === 'couple') {
-              const name = tx.payer_nickname || '成員';
-              memberPaid[name] = (memberPaid[name] || 0) + amt;
-            }
-          }
-        });
-
-        return { incomeTotal, expenseTotal, balance: incomeTotal - expenseTotal, expenseTree, incomeTree, memberPaid };
-      }, [transactions, activeLedger]);
-
-      return (
-        <div className="space-y-6">
-          <div className="flex items-center gap-2">
-            <input
-              type="month"
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="px-3 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-latte-300 dark:border-neutral-600 text-sm font-semibold"
-            />
-          </div>
-
-          <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-2 text-sm">
-            <div className="flex justify-between"><span>本月收入總額：</span><span className="font-bold text-emerald-600">+{currencySymbol}{stats.incomeTotal.toLocaleString()}</span></div>
-            <div className="flex justify-between"><span>本月支出總額：</span><span className="font-bold text-rose-600">-{currencySymbol}{stats.expenseTotal.toLocaleString()}</span></div>
-            <div className="flex justify-between border-t border-latte-100 dark:border-neutral-700 pt-2">
-              <span>本月結餘：</span>
-              <span className={`font-bold ${stats.balance < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                {stats.balance >= 0 ? `+${currencySymbol}${stats.balance.toLocaleString()}` : `-${currencySymbol}${Math.abs(stats.balance).toLocaleString()}`}
-              </span>
-            </div>
-          </div>
-
-          {activeLedger?.type === 'couple' && (
-            <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-2 text-sm">
-              <h3 className="font-bold text-base mb-2">共同帳本成員實際付款統計</h3>
-              <div className="flex justify-between font-semibold">
-                <span>共同支出總額：</span>
-                <span>{currencySymbol}{stats.expenseTotal.toLocaleString()}</span>
-              </div>
-              {Object.entries(stats.memberPaid).map(([name, amt]) => (
-                <div key={name} className="flex justify-between pl-3 text-latte-700 dark:text-neutral-300">
-                  <span>- {name}：</span>
-                  <span>{currencySymbol}{amt.toLocaleString()}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-3 text-sm">
-              <h3 className="font-bold text-base text-rose-600">支出分類統計</h3>
-              {Object.keys(stats.expenseTree).length === 0 && <div className="text-latte-500">本月無支出紀錄</div>}
-              {Object.entries(stats.expenseTree).map(([major, data]) => (
-                <div key={major} className="space-y-1">
-                  <div className="font-bold flex justify-between">
-                    <span>{major}：</span>
-                    <span>{currencySymbol}{data.total.toLocaleString()}</span>
-                  </div>
-                  {Object.entries(data.subs).map(([sub, subAmt]) => (
-                    <div key={sub} className="flex justify-between pl-4 text-latte-600 dark:text-neutral-400">
-                      <span>- {sub}：</span>
-                      <span>{currencySymbol}{subAmt.toLocaleString()}</span>
+                    <div className="text-base sm:text-xl font-bold text-latte-900 dark:text-white tracking-tight">
+                      NT$ {amountStr}
                     </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-
-            <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-3 text-sm">
-              <h3 className="font-bold text-base text-emerald-600">收入分類統計</h3>
-              {Object.keys(stats.incomeTree).length === 0 && <div className="text-latte-500">本月無收入紀錄</div>}
-              {Object.entries(stats.incomeTree).map(([major, data]) => (
-                <div key={major} className="space-y-1">
-                  <div className="font-bold flex justify-between">
-                    <span>{major}：</span>
-                    <span>{currencySymbol}{data.total.toLocaleString()}</span>
                   </div>
-                  {Object.entries(data.subs).map(([sub, subAmt]) => (
-                    <div key={sub} className="flex justify-between pl-4 text-latte-600 dark:text-neutral-400">
-                      <span>- {sub}：</span>
-                      <span>{currencySymbol}{subAmt.toLocaleString()}</span>
-                    </div>
-                  ))}
+
+                  <div className="flex items-center gap-1 bg-latte-200/60 dark:bg-neutral-700 p-1 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => setType('expense')}
+                      className={`px-3 py-1 rounded-lg text-xs font-semibold transition ${type === 'expense' ? 'bg-rose-600 text-white shadow-xs' : 'text-latte-700 dark:text-neutral-300'}`}
+                    >
+                      支出
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setType('income')}
+                      className={`px-3 py-1 rounded-lg text-xs font-semibold transition ${type === 'income' ? 'bg-emerald-600 text-white shadow-xs' : 'text-latte-700 dark:text-neutral-300'}`}
+                    >
+                      收入
+                    </button>
+                  </div>
                 </div>
-              ))}
-            </div>
+
+                {/* 仿參考圖的計算機數字鍵盤 (右側放置付款方式、日期與確認) */}
+                <div className="grid grid-cols-5 gap-1.5">
+                  {/* 第一列 */}
+                  <button type="button" onClick={() => handleKeyPress('1')} className="py-3.5 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-100 font-bold text-base shadow-2xs">1</button>
+                  <button type="button" onClick={() => handleKeyPress('2')} className="py-3.5 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-100 font-bold text-base shadow-2xs">2</button>
+                  <button type="button" onClick={() => handleKeyPress('3')} className="py-3.5 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-100 font-bold text-base shadow-2xs">3</button>
+                  <button type="button" onClick={() => handleKeyPress('+')} className="py-3.5 rounded-xl bg-latte-100 dark:bg-neutral-700 hover:bg-latte-200 font-bold text-xs text-latte-600 dark:text-neutral-200">+-</button>
+                  
+                  {/* 右上：付款方式選擇按鈕 (結合彈出或下拉) */}
+                  <div className="relative">
+                    <select
+                      value={paymentMethod}
+                      onChange={(e) => setPaymentMethod(e.target.value)}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                    >
+                      {activePms.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
+                    </select>
+                    <div className="h-full py-3 px-1 rounded-xl bg-latte-100 dark:bg-neutral-700 hover:bg-latte-200 text-xs font-bold text-latte-800 dark:text-neutral-200 flex flex-col items-center justify-center text-center shadow-2xs">
+                      <span>💳</span>
+                      <span className="truncate w-full text-[11px]">{paymentMethod || '付款'}</span>
+                    </div>
+                  </div>
+
+                  {/* 第二列 */}
+                  <button type="button" onClick={() => handleKeyPress('4')} className="py-3.5 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-100 font-bold text-base shadow-2xs">4</button>
+                  <button type="button" onClick={() => handleKeyPress('5')} className="py-3.5 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-100 font-bold text-base shadow-2xs">5</button>
+                  <button type="button" onClick={() => handleKeyPress('6')} className="py-3.5 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-100 font-bold text-base shadow-2xs">6</button>
+                  <button type="button" onClick={() => handleKeyPress('×')} className="py-3.5 rounded-xl bg-latte-100 dark:bg-neutral-700 hover:bg-latte-200 font-bold text-xs text-latte-600 dark:text-neutral-200">×</button>
+                  
+                  {/* 右中：日期選擇 / 今日按鈕 */}
+                  <div className="relative">
+                    <input
+                      type="date"
+                      value={date}
+                      onChange={(e) => setDate(e.target.value)}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                    />
+                    <div className="h-full py-3 px-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex flex-col items-center justify-center text-center shadow-sm">
+                      <span className="text-xs">📅</span>
+                      <span className="text-[10px] truncate w-full">{date === getTodayStr() ? '今日' : date.slice(5)}</span>
+                    </div>
+                  </div>
+
+                  {/* 第三列 */}
+                  <button type="button" onClick={() => handleKeyPress('7')} className="py-3.5 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-100 font-bold text-base shadow-2xs">7</button>
+                  <button type="button" onClick={() => handleKeyPress('8')} className="py-3.5 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-100 font-bold text-base shadow-2xs">8</button>
+                  <button type="button" onClick={() => handleKeyPress('9')} className="py-3.5 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-100 font-bold text-base shadow-2xs">9</button>
+                  <button type="button" onClick={() => handleKeyPress('AC')} className="py-3.5 rounded-xl bg-latte-100 dark:bg-neutral-700 hover:bg-latte-200 font-bold text-xs text-latte-600 dark:text-neutral-200">AC</button>
+                  
+                  {/* 右下：確認送出按鈕 (跨兩行高度) */}
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={handleSubmit}
+                    className="row-span-2 py-3 rounded-xl bg-latte-600 hover:bg-latte-700 active:bg-latte-800 text-white font-bold text-sm shadow-md flex items-center justify-center transition"
+                  >
+                    {saving ? '儲存...' : '確定'}
+                  </button>
+
+                  {/* 第四列 */}
+                  <button type="button" onClick={() => handleKeyPress('.')} className="py-3.5 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-100 font-bold text-base shadow-2xs">.</button>
+                  <button type="button" onClick={() => handleKeyPress('0')} className="py-3.5 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-100 font-bold text-base shadow-2xs">0</button>
+                  <button type="button" onClick={() => handleKeyPress('00')} className="py-3.5 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-100 font-bold text-base shadow-2xs">00</button>
+                  <button type="button" onClick={() => handleKeyPress('backspace')} className="py-3.5 rounded-xl bg-latte-100 dark:bg-neutral-700 hover:bg-latte-200 font-bold text-xs text-latte-600 dark:text-neutral-200 flex items-center justify-center">⌫</button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       );
