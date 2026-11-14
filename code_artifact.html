@@ -1,0 +1,2393 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>個人與情侶共同記帳系統</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            latte: {
+              50: '#FAF8F5',
+              100: '#F3EFEA',
+              200: '#E6DDD3',
+              300: '#D4C5B4',
+              400: '#B8A28B',
+              500: '#9C8267',
+              600: '#7D654D',
+              700: '#5E4B38',
+              800: '#3D3126',
+              900: '#261F18',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <!-- React & Babel (支援瀏覽器直接執行 JSX) -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- SheetJS (Excel / CSV 匯出) -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+  <!-- Firebase Compat SDK (穩定支援單一 HTML 運行) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC", sans-serif; }
+  </style>
+</head>
+<body class="bg-latte-50 text-latte-900 dark:bg-neutral-900 dark:text-latte-100 transition-colors">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useMemo } = React;
+
+    // 預設收支分類
+    const DEFAULT_CATEGORIES = [
+      { type: 'expense', major: '吃喝', subs: ['早餐', '午餐', '晚餐', '飲料', '點心', '宵夜'] },
+      { type: 'expense', major: '交通', subs: ['大眾運輸', '計程車', '加油', '停車', '其他交通'] },
+      { type: 'expense', major: '娛樂', subs: ['電影', '遊戲', '休閒活動'] },
+      { type: 'expense', major: '購物', subs: ['服飾', '生活用品', '電子產品'] },
+      { type: 'income', major: '工作收入', subs: ['薪水', '兼職', '獎金'] },
+      { type: 'income', major: '其他收入', subs: ['獎學金', '紅包', '利息', '其他收入'] },
+    ];
+
+    const DEFAULT_PAYMENT_METHODS = ['現金', '信用卡', '銀行轉帳'];
+
+    const CURRENCIES = [
+      { code: 'TWD', symbol: 'NT$', name: '新台幣 (TWD)' },
+      { code: 'USD', symbol: 'US$', name: '美元 (USD)' },
+      { code: 'JPY', symbol: '¥', name: '日圓 (JPY)' },
+      { code: 'EUR', symbol: '€', name: '歐元 (EUR)' },
+      { code: 'HKD', symbol: 'HK$', name: '港幣 (HKD)' },
+      { code: 'KRW', symbol: '₩', name: '韓元 (KRW)' },
+    ];
+
+    // 取得 Asia/Taipei (UTC+8) 今日日期字串
+    function getTodayStr() {
+      const now = new Date();
+      const offset = 8 * 60;
+      const taipei = new Date(now.getTime() + (offset + now.getTimezoneOffset()) * 60000);
+      return taipei.toISOString().split('T')[0];
+    }
+
+    function getYearMonthStr(dateStr = getTodayStr()) {
+      return dateStr.slice(0, 7);
+    }
+
+    // 解析使用者貼上的 firebaseConfig (支援 JSON、JS 物件格式與含網址的設定)
+    function parseFirebaseConfig(input) {
+      try {
+        const normalized = input.replace(/\u00A0/g, ' ').trim();
+        if (normalized.startsWith('{')) return JSON.parse(normalized);
+        const match = normalized.match(/\{[\s\S]*\}/);
+        if (!match) return null;
+        const jsonLike = match[0]
+          .replace(/([{,]\s*)(['"])?([a-zA-Z0-9_]+)(['"])?\s*:/g, '$1"$3": ')
+          .replace(/'/g, '"')
+          .replace(/,\s*}/g, '}');
+        return JSON.parse(jsonLike);
+      } catch (e) {
+        return null;
+      }
+    }
+
+    // 客製化確認與輸入對話框（取代原生 confirm / prompt / alert）
+    function CustomModalDialog({ dialog, onClose }) {
+      const [inputValue, setInputValue] = useState('');
+
+      useEffect(() => {
+        if (dialog?.defaultValue !== undefined) {
+          setInputValue(dialog.defaultValue);
+        } else {
+          setInputValue('');
+        }
+      }, [dialog]);
+
+      if (!dialog) return null;
+
+      return (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-neutral-800 rounded-2xl max-w-md w-full p-6 shadow-xl border border-latte-200 dark:border-neutral-700 space-y-4">
+            <h3 className="font-bold text-lg text-latte-900 dark:text-white">{dialog.title}</h3>
+            {dialog.message && (
+              <p className="text-sm text-latte-700 dark:text-neutral-300 whitespace-pre-line leading-relaxed">
+                {dialog.message}
+              </p>
+            )}
+            {dialog.mode === 'prompt' && (
+              <input
+                type="text"
+                autoFocus
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                className="w-full p-2.5 rounded-xl border border-latte-300 dark:border-neutral-600 dark:bg-neutral-700 text-sm"
+              />
+            )}
+            <div className="flex justify-end gap-2 pt-2">
+              {dialog.mode !== 'alert' && (
+                <button
+                  type="button"
+                  onClick={() => onClose(null)}
+                  className="px-4 py-2 rounded-xl bg-latte-100 dark:bg-neutral-700 text-latte-700 dark:text-neutral-200 text-sm font-medium"
+                >
+                  取消
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => onClose(dialog.mode === 'prompt' ? inputValue : true)}
+                className={`px-4 py-2 rounded-xl text-white text-sm font-semibold ${
+                  dialog.danger ? 'bg-rose-600 hover:bg-rose-700' : 'bg-latte-600 hover:bg-latte-700'
+                }`}
+              >
+                {dialog.confirmText || '確定'}
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function App() {
+      // 全域 Toast 與客製化對話框
+      const [toastMsg, setToastMsg] = useState('');
+      const [dialogState, setDialogState] = useState(null);
+
+      function showToast(msg) {
+        setToastMsg(msg);
+        setTimeout(() => setToastMsg((prev) => (prev === msg ? '' : prev)), 3200);
+      }
+
+      function askConfirm({ title, message, danger = false, confirmText = '確定' }) {
+        return new Promise((resolve) => {
+          setDialogState({
+            mode: 'confirm',
+            title,
+            message,
+            danger,
+            confirmText,
+            resolve,
+          });
+        });
+      }
+
+      function askPrompt({ title, message = '', defaultValue = '' }) {
+        return new Promise((resolve) => {
+          setDialogState({
+            mode: 'prompt',
+            title,
+            message,
+            defaultValue,
+            resolve,
+          });
+        });
+      }
+
+      // 主題設定
+      const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'system');
+      useEffect(() => {
+        const root = document.documentElement;
+        const applyDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        root.classList.toggle('dark', applyDark);
+        localStorage.setItem('theme', theme);
+      }, [theme]);
+
+      // Firebase 連線狀態
+      const [fbConfigText, setFbConfigText] = useState(() => localStorage.getItem('fb_config') || '');
+      const [fbReady, setFbReady] = useState(false);
+      const [configError, setConfigError] = useState('');
+      const [configModalOpen, setConfigModalOpen] = useState(false);
+      const [user, setUser] = useState(null);
+      const [authLoading, setAuthLoading] = useState(true);
+      const [authError, setAuthError] = useState('');
+
+      // 初始化 Firebase
+      useEffect(() => {
+        if (!fbConfigText) {
+          setAuthLoading(false);
+          return;
+        }
+        const parsed = parseFirebaseConfig(fbConfigText);
+        if (!parsed || !parsed.apiKey || !parsed.projectId) {
+          setConfigError('設定格式無法解析，請貼上完整的 firebaseConfig 物件。');
+          setAuthLoading(false);
+          return;
+        }
+        try {
+          if (!firebase.apps.length) {
+            firebase.initializeApp(parsed);
+          }
+          setFbReady(true);
+          setConfigError('');
+
+          firebase.auth().getRedirectResult().catch((err) => {
+            setAuthError(`登入失敗 (${err.code})：${err.message}`);
+          });
+
+          const unsub = firebase.auth().onAuthStateChanged(async (u) => {
+            setUser(u);
+            if (u) {
+              try {
+                await ensureUserInitialized(u);
+              } catch (e) {
+                setAuthError('初始化個人資料失敗：' + e.message);
+              }
+            }
+            setAuthLoading(false);
+          });
+          return () => unsub();
+        } catch (err) {
+          setConfigError('Firebase 初始化失敗：' + err.message);
+          setAuthLoading(false);
+        }
+      }, [fbConfigText]);
+
+      // 首次登入自動建立 Profile 與預設個人帳本
+      async function ensureUserInitialized(u) {
+        const db = firebase.firestore();
+        const profileRef = db.collection('profiles').doc(u.uid);
+        const profileSnap = await profileRef.get();
+        const defaultNickname = u.displayName || u.email.split('@')[0];
+
+        if (!profileSnap.exists) {
+          await profileRef.set({
+            uid: u.uid,
+            email: u.email,
+            nickname: defaultNickname,
+            created_at: firebase.firestore.FieldValue.serverTimestamp(),
+          });
+        }
+
+        const ledgersSnap = await db.collection('ledgers')
+          .where('owner_id', '==', u.uid)
+          .where('type', '==', 'personal')
+          .get();
+
+        if (ledgersSnap.empty) {
+          const ledgerRef = db.collection('ledgers').doc();
+          // 先建立帳本文件，確保後續寫入分類與付款方式時通過 ledgerExists 檢查
+          await ledgerRef.set({
+            name: '我的個人帳本',
+            type: 'personal',
+            owner_id: u.uid,
+            memberIds: [u.uid],
+            members: { [u.uid]: { role: 'owner', email: u.email, nickname: defaultNickname } },
+            max_members: 1,
+            currency: 'TWD',
+            is_archived: false,
+            created_at: firebase.firestore.FieldValue.serverTimestamp(),
+          });
+
+          const batch = db.batch();
+          DEFAULT_CATEGORIES.forEach((cat) => {
+            cat.subs.forEach((sub) => {
+              const catRef = db.collection('categories').doc();
+              batch.set(catRef, {
+                ledger_id: ledgerRef.id,
+                type: cat.type,
+                major: cat.major,
+                sub: sub,
+                is_archived: false,
+              });
+            });
+          });
+
+          DEFAULT_PAYMENT_METHODS.forEach((pm) => {
+            const pmRef = db.collection('payment_methods').doc();
+            batch.set(pmRef, {
+              ledger_id: ledgerRef.id,
+              name: pm,
+              is_active: true,
+            });
+          });
+
+          await batch.commit();
+        }
+      }
+
+      // 業務資料狀態
+      const [profile, setProfile] = useState(null);
+      const [ledgers, setLedgers] = useState([]);
+      const [activeLedgerId, setActiveLedgerId] = useState('');
+      const [invitations, setInvitations] = useState([]);
+      const [transactions, setTransactions] = useState([]);
+      const [categories, setCategories] = useState([]);
+      const [paymentMethods, setPaymentMethods] = useState([]);
+      const [budgetDoc, setBudgetDoc] = useState(null);
+
+      // 導覽與篩選狀態
+      const [activeTab, setActiveTab] = useState('home');
+      const [selectedMonth, setSelectedMonth] = useState(getYearMonthStr());
+      const [customDateRange, setCustomDateRange] = useState({ enabled: false, start: '', end: '' });
+
+      // Modal 狀態
+      const [txModalOpen, setTxModalOpen] = useState(false);
+      const [editingTx, setEditingTx] = useState(null);
+
+      // 監聽使用者 Profile、帳本列表與邀請
+      useEffect(() => {
+        if (!user || !fbReady) return;
+        const db = firebase.firestore();
+
+        const unsubProfile = db.collection('profiles').doc(user.uid).onSnapshot((doc) => {
+          if (doc.exists) setProfile(doc.data());
+        });
+
+        const unsubLedgers = db.collection('ledgers')
+          .where('memberIds', 'array-contains', user.uid)
+          .onSnapshot((snap) => {
+            const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+            setLedgers(list);
+            const activeList = list.filter((l) => !l.is_archived);
+            if (activeList.length > 0 && (!activeLedgerId || !activeList.some((l) => l.id === activeLedgerId))) {
+              const personal = activeList.find((l) => l.type === 'personal');
+              setActiveLedgerId(personal ? personal.id : activeList[0].id);
+            }
+          });
+
+        const unsubInvites = db.collection('ledger_invitations')
+          .where('invitee_email', '==', (user.email || '').toLowerCase())
+          .where('status', '==', 'pending')
+          .onSnapshot((snap) => {
+            setInvitations(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+          });
+
+        return () => {
+          unsubProfile();
+          unsubLedgers();
+          unsubInvites();
+        };
+      }, [user, fbReady]);
+
+      const activeLedger = useMemo(() => ledgers.find((l) => l.id === activeLedgerId), [ledgers, activeLedgerId]);
+      const currencySymbol = useMemo(() => {
+        const found = CURRENCIES.find((c) => c.code === (activeLedger?.currency || 'TWD'));
+        return found ? found.symbol : 'NT$';
+      }, [activeLedger]);
+
+      // 監聽當前帳本的交易、分類、付款方式
+      useEffect(() => {
+        if (!activeLedgerId || !fbReady) return;
+        const db = firebase.firestore();
+
+        const unsubTx = db.collection('transactions')
+          .where('ledger_id', '==', activeLedgerId)
+          .onSnapshot((snap) => {
+            const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+            list.sort((a, b) => {
+              if (b.date !== a.date) return b.date.localeCompare(a.date);
+              return (b.created_ms || 0) - (a.created_ms || 0);
+            });
+            setTransactions(list);
+          });
+
+        const unsubCat = db.collection('categories')
+          .where('ledger_id', '==', activeLedgerId)
+          .onSnapshot((snap) => {
+            setCategories(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+          });
+
+        const unsubPm = db.collection('payment_methods')
+          .where('ledger_id', '==', activeLedgerId)
+          .onSnapshot((snap) => {
+            setPaymentMethods(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+          });
+
+        return () => {
+          unsubTx();
+          unsubCat();
+          unsubPm();
+        };
+      }, [activeLedgerId, fbReady]);
+
+      // 監聽當前月份預算
+      useEffect(() => {
+        if (!activeLedgerId || !selectedMonth || !fbReady) return;
+        const db = firebase.firestore();
+        const budgetId = `${activeLedgerId}_${selectedMonth}`;
+        const unsub = db.collection('budgets').doc(budgetId).onSnapshot((doc) => {
+          setBudgetDoc(doc.exists ? doc.data() : { total: 0, majors: {}, subs: {} });
+        });
+        return () => unsub();
+      }, [activeLedgerId, selectedMonth, fbReady]);
+
+      // 登入處理（支援彈窗與自動跳轉備援）
+      async function handleGoogleLogin() {
+        setAuthError('');
+        if (!fbReady) {
+          setConfigModalOpen(true);
+          return;
+        }
+        if (window.location.protocol === 'file:') {
+          setAuthError('偵測到您直接雙擊開啟檔案 (file://)，Google 登入必須透過本地伺服器 (http://localhost) 執行。');
+          return;
+        }
+        const provider = new firebase.auth.GoogleAuthProvider();
+        try {
+          await firebase.auth().signInWithPopup(provider);
+        } catch (err) {
+          if (err.code === 'auth/popup-blocked' || err.code === 'auth/cancelled-popup-request') {
+            await firebase.auth().signInWithRedirect(provider);
+          } else if (err.code === 'auth/unauthorized-domain') {
+            setAuthError(`網域未授權 (${window.location.hostname})：請前往 Firebase Console → Authentication → Settings → Authorized domains 新增此網域。`);
+          } else {
+            setAuthError(`登入錯誤 (${err.code})：${err.message}`);
+          }
+        }
+      }
+
+      // 月份切換輔助
+      function shiftMonth(delta) {
+        setCustomDateRange({ enabled: false, start: '', end: '' });
+        const [y, m] = selectedMonth.split('-').map(Number);
+        const d = new Date(y, m - 1 + delta, 1);
+        setSelectedMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+      }
+
+      // 篩選目前月份或自訂區間交易
+      const periodTransactions = useMemo(() => {
+        return transactions.filter((tx) => {
+          if (customDateRange.enabled) {
+            if (customDateRange.start && tx.date < customDateRange.start) return false;
+            if (customDateRange.end && tx.date > customDateRange.end) return false;
+            return true;
+          }
+          return tx.date.startsWith(selectedMonth);
+        });
+      }, [transactions, selectedMonth, customDateRange]);
+
+      // 月度摘要統計
+      const summary = useMemo(() => {
+        let income = 0;
+        let expense = 0;
+        periodTransactions.forEach((tx) => {
+          const amt = Number(tx.amount) || 0;
+          if (tx.type === 'income') income += amt;
+          else expense += amt;
+        });
+        return { income, expense, balance: income - expense };
+      }, [periodTransactions]);
+
+      if (authLoading) {
+        return <div className="min-h-screen flex items-center justify-center text-latte-600">載入系統資料中...</div>;
+      }
+
+      // 統一登入歡迎畫面（不再一開始就強制顯示 Firebase 設定框）
+      if (!user) {
+        return (
+          <div className="min-h-screen flex flex-col justify-between bg-latte-50 dark:bg-neutral-900 p-4 sm:p-6">
+            {/* 頂部導覽列 */}
+            <header className="max-w-5xl w-full mx-auto flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-latte-600 text-white flex items-center justify-center font-bold text-lg shadow-sm">
+                  記
+                </div>
+                <div>
+                  <span className="font-bold text-base text-latte-900 dark:text-white block leading-tight">暖心日常記帳本</span>
+                  <span className="text-[11px] text-latte-500 dark:text-neutral-400">Personal & Couple Expense Tracker</span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfigModalOpen(true)}
+                  className="px-3 py-1.5 rounded-xl text-xs font-medium bg-white dark:bg-neutral-800 border border-latte-200 dark:border-neutral-700 text-latte-700 dark:text-neutral-300 hover:bg-latte-100 dark:hover:bg-neutral-700 transition flex items-center gap-1.5"
+                >
+                  <span className={`w-2 h-2 rounded-full ${fbReady ? 'bg-emerald-500' : 'bg-amber-400'}`}></span>
+                  {fbReady ? '雲端已連線' : '雲端連線設定'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const order = ['light', 'dark', 'system'];
+                    setTheme(order[(order.indexOf(theme) + 1) % order.length]);
+                  }}
+                  className="px-2.5 py-1.5 rounded-xl text-xs bg-white dark:bg-neutral-800 border border-latte-200 dark:border-neutral-700 text-latte-600 dark:text-neutral-300"
+                  title="切換顯示主題"
+                >
+                  {theme === 'light' ? '淺色' : theme === 'dark' ? '深色' : '自動'}
+                </button>
+              </div>
+            </header>
+
+            {/* 中央登入卡片 */}
+            <main className="max-w-md w-full mx-auto my-auto py-6">
+              <div className="bg-white dark:bg-neutral-800 rounded-3xl shadow-xl p-7 sm:p-8 border border-latte-200 dark:border-neutral-700 space-y-6">
+                <div className="text-center space-y-2">
+                  <div className="w-16 h-16 mx-auto rounded-2xl bg-latte-100 dark:bg-neutral-700 border border-latte-200 dark:border-neutral-600 flex items-center justify-center text-2xl font-bold text-latte-700 dark:text-latte-200 shadow-xs">
+                    記
+                  </div>
+                  <h1 className="text-2xl font-bold text-latte-900 dark:text-white pt-1">個人與情侶共同記帳</h1>
+                  <p className="text-sm text-latte-600 dark:text-neutral-400 leading-relaxed">
+                    簡單直覺的日常收支管理，讓個人儲蓄與伴侶共同生活開銷都井井有條。
+                  </p>
+                </div>
+
+                {/* 核心特色亮點 */}
+                <div className="bg-latte-50 dark:bg-neutral-900/60 rounded-2xl p-4 border border-latte-100 dark:border-neutral-700/80 space-y-2.5 text-xs text-latte-700 dark:text-neutral-300">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-5 h-5 rounded-lg bg-latte-200/80 dark:bg-neutral-700 text-latte-700 dark:text-latte-200 flex items-center justify-center font-bold shrink-0">✓</span>
+                    <span>個人帳本私密獨立，共同帳本支援最多 5 人即時同步</span>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-5 h-5 rounded-lg bg-latte-200/80 dark:bg-neutral-700 text-latte-700 dark:text-latte-200 flex items-center justify-center font-bold shrink-0">✓</span>
+                    <span>自動記錄每筆支出付款人，雙方分攤與支出明細一目了然</span>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-5 h-5 rounded-lg bg-latte-200/80 dark:bg-neutral-700 text-latte-700 dark:text-latte-200 flex items-center justify-center font-bold shrink-0">✓</span>
+                    <span>支援多幣別管理、月度預算進度追蹤與 Excel / JSON 備份</span>
+                  </div>
+                </div>
+
+                {authError && (
+                  <div className="p-3.5 rounded-xl bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-xs text-red-700 dark:text-red-300 text-left leading-relaxed">
+                    {authError}
+                  </div>
+                )}
+
+                <div className="space-y-3">
+                  <button
+                    type="button"
+                    onClick={handleGoogleLogin}
+                    className="w-full py-3.5 px-5 rounded-2xl bg-latte-700 hover:bg-latte-800 active:scale-[0.99] text-white font-semibold text-sm shadow-sm transition flex items-center justify-center gap-3"
+                  >
+                    <svg className="w-5 h-5 bg-white rounded-full p-0.5 shrink-0" viewBox="0 0 24 24">
+                      <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z" />
+                      <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24z" />
+                      <path fill="#FBBC05" d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14z" />
+                      <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96z" />
+                    </svg>
+                    <span>使用 Google 帳號登入</span>
+                  </button>
+
+                  {!fbReady && (
+                    <p className="text-center text-[11px] text-latte-500 dark:text-neutral-400">
+                      首次使用請先點擊上方「雲端連線設定」或登入按鈕綁定您的 Firebase 專案
+                    </p>
+                  )}
+                </div>
+              </div>
+            </main>
+
+            <footer className="text-center text-xs text-latte-500 dark:text-neutral-500">
+              資料加密儲存於您的專屬雲端空間 • 支援手機與電腦跨裝置同步
+            </footer>
+
+            {/* Firebase 連線設定彈出視窗（按需開啟） */}
+            {configModalOpen && (
+              <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+                <div className="max-w-lg w-full bg-white dark:bg-neutral-800 rounded-2xl shadow-xl p-6 border border-latte-200 dark:border-neutral-700 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-lg font-bold text-latte-900 dark:text-white">Firebase 雲端資料庫連線設定</h2>
+                    <button
+                      type="button"
+                      onClick={() => setConfigModalOpen(false)}
+                      className="p-1.5 rounded-lg text-latte-500 hover:bg-latte-100 dark:hover:bg-neutral-700"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <p className="text-xs text-latte-600 dark:text-neutral-300 leading-relaxed">
+                    請前往 Firebase Console → 專案設定 → 您的應用程式，複製 <code className="bg-latte-100 dark:bg-neutral-700 px-1.5 py-0.5 rounded">firebaseConfig</code> 整段貼入下方：
+                  </p>
+                  <textarea
+                    rows="7"
+                    className="w-full p-3 text-xs font-mono rounded-xl border border-latte-300 dark:border-neutral-600 bg-latte-50 dark:bg-neutral-900 focus:outline-none focus:ring-2 focus:ring-latte-500"
+                    placeholder={'const firebaseConfig = {\n  apiKey: "...",\n  authDomain: "...",\n  projectId: "...",\n  ...\n};'}
+                    value={fbConfigText}
+                    onChange={(e) => setFbConfigText(e.target.value)}
+                  />
+                  {configError && <p className="text-xs text-red-600 font-medium">{configError}</p>}
+                  <div className="flex justify-end gap-2 pt-1">
+                    {fbReady && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          localStorage.removeItem('fb_config');
+                          window.location.reload();
+                        }}
+                        className="px-3.5 py-2.5 rounded-xl border border-rose-300 text-rose-600 text-xs font-medium mr-auto"
+                      >
+                        清除目前設定
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setConfigModalOpen(false)}
+                      className="px-4 py-2.5 rounded-xl bg-latte-100 dark:bg-neutral-700 text-latte-700 dark:text-neutral-200 text-xs font-semibold"
+                    >
+                      取消
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        localStorage.setItem('fb_config', fbConfigText);
+                        window.location.reload();
+                      }}
+                      className="px-5 py-2.5 rounded-xl bg-latte-600 hover:bg-latte-700 text-white text-xs font-semibold transition"
+                    >
+                      儲存設定並連線
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      if (authLoading) {
+        return <div className="min-h-screen flex items-center justify-center text-latte-600">載入系統資料中...</div>;
+      }
+
+      // 2. 登入畫面
+      if (!user) {
+        return (
+          <div className="min-h-screen flex items-center justify-center p-4">
+            <div className="max-w-md w-full bg-white dark:bg-neutral-800 rounded-3xl shadow-xl p-8 border border-latte-200 dark:border-neutral-700 text-center space-y-6">
+              <div className="w-16 h-16 mx-auto rounded-2xl bg-latte-200 dark:bg-neutral-700 flex items-center justify-center text-2xl font-bold text-latte-700 dark:text-latte-200">
+                記
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-latte-900 dark:text-white">個人與情侶共同記帳</h1>
+                <p className="text-sm text-latte-600 dark:text-neutral-400 mt-2">雲端即時同步・個人隱私隔離・溫暖日常收支管理</p>
+              </div>
+              {authError && (
+                <div className="p-3 rounded-xl bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-xs text-red-700 dark:text-red-300 text-left">
+                  {authError}
+                </div>
+              )}
+              <button
+                onClick={handleGoogleLogin}
+                className="w-full py-3.5 px-4 rounded-xl bg-latte-700 hover:bg-latte-800 text-white font-semibold shadow-sm transition flex items-center justify-center gap-2"
+              >
+                <span>使用 Google 帳號登入</span>
+              </button>
+              <button
+                onClick={() => {
+                  localStorage.removeItem('fb_config');
+                  window.location.reload();
+                }}
+                className="text-xs text-latte-500 hover:underline"
+              >
+                重設 Firebase 連線設定
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      const activeLedgers = ledgers.filter((l) => !l.is_archived);
+      const navItems = [
+        { id: 'home', label: '首頁' },
+        { id: 'stats', label: '統計' },
+        { id: 'budgets', label: '預算' },
+        { id: 'settings', label: '設定' },
+      ];
+
+      return (
+        <div className="min-h-screen flex flex-col md:flex-row pb-20 md:pb-0">
+          {/* Toast 提示 */}
+          {toastMsg && (
+            <div className="fixed top-4 right-4 z-50 px-4 py-2.5 rounded-xl bg-latte-800 text-white text-sm shadow-lg">
+              {toastMsg}
+            </div>
+          )}
+
+          {/* 客製化確認 / 輸入對話框 */}
+          <CustomModalDialog
+            dialog={dialogState}
+            onClose={(result) => {
+              const res = dialogState?.resolve;
+              setDialogState(null);
+              if (res) res(result);
+            }}
+          />
+
+          {/* 電腦版左側側邊欄 */}
+          <aside className="hidden md:flex md:w-64 md:flex-col bg-latte-100 dark:bg-neutral-800 border-r border-latte-200 dark:border-neutral-700 p-4 justify-between shrink-0">
+            <div className="space-y-6">
+              <div>
+                <div className="text-xs text-latte-500 dark:text-neutral-400 mb-1">目前使用帳本</div>
+                <select
+                  value={activeLedgerId}
+                  onChange={(e) => setActiveLedgerId(e.target.value)}
+                  className="w-full p-2.5 rounded-xl bg-white dark:bg-neutral-700 border border-latte-300 dark:border-neutral-600 font-semibold text-sm"
+                >
+                  {activeLedgers.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.type === 'couple' ? '💑 ' : '👤 '}{l.name} ({l.currency})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <nav className="space-y-1">
+                {navItems.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => setActiveTab(item.id)}
+                    className={`w-full text-left px-4 py-3 rounded-xl font-medium transition ${
+                      activeTab === item.id
+                        ? 'bg-latte-600 text-white shadow-sm'
+                        : 'text-latte-800 dark:text-neutral-200 hover:bg-latte-200/70 dark:hover:bg-neutral-700'
+                    }`}
+                  >
+                    {item.label}
+                    {item.id === 'settings' && invitations.length > 0 && (
+                      <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-red-500 text-white">{invitations.length}</span>
+                    )}
+                  </button>
+                ))}
+              </nav>
+            </div>
+
+            <div className="pt-4 border-t border-latte-200 dark:border-neutral-700 space-y-2 text-xs text-latte-600 dark:text-neutral-400">
+              <div>暱稱：{profile?.nickname}</div>
+              <button
+                onClick={() => firebase.auth().signOut()}
+                className="w-full py-2 rounded-lg border border-latte-300 dark:border-neutral-600 hover:bg-latte-200 dark:hover:bg-neutral-700 text-center font-medium"
+              >
+                登出帳號
+              </button>
+            </div>
+          </aside>
+
+          {/* 手機版頂部帳本切換列 */}
+          <header className="md:hidden sticky top-0 z-20 bg-latte-100/95 dark:bg-neutral-800/95 backdrop-blur border-b border-latte-200 dark:border-neutral-700 px-4 py-3 flex items-center justify-between gap-2">
+            <select
+              value={activeLedgerId}
+              onChange={(e) => setActiveLedgerId(e.target.value)}
+              className="flex-1 p-2 rounded-xl bg-white dark:bg-neutral-700 border border-latte-300 dark:border-neutral-600 font-semibold text-sm"
+            >
+              {activeLedgers.length === 0 && <option value="">尚無啟用中的帳本</option>}
+              {activeLedgers.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.type === 'couple' ? '💑 ' : '👤 '}{l.name} ({l.currency})
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              disabled={!activeLedger}
+              onClick={() => {
+                if (!activeLedger) {
+                  showToast('請先在「設定」還原或建立帳本');
+                  return;
+                }
+                setEditingTx(null);
+                setTxModalOpen(true);
+              }}
+              className="px-4 py-2 rounded-xl bg-latte-600 disabled:opacity-50 text-white text-sm font-semibold shrink-0"
+            >
+              + 記一筆
+            </button>
+          </header>
+
+          {/* 主內容區 */}
+          <main className="flex-1 max-w-4xl w-full mx-auto p-4 md:p-8 space-y-6">
+            {!activeLedger && activeTab !== 'settings' ? (
+              <div className="bg-white dark:bg-neutral-800 rounded-2xl p-8 border border-latte-200 dark:border-neutral-700 text-center space-y-4">
+                <div className="text-base font-bold text-latte-800 dark:text-latte-100">目前沒有啟用中的帳本</div>
+                <p className="text-sm text-latte-600 dark:text-neutral-400">您的帳本可能已全部封存或正在建立中，請前往設定頁解除封存或建立新帳本。</p>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('settings')}
+                  className="px-5 py-2.5 rounded-xl bg-latte-600 text-white text-sm font-semibold"
+                >
+                  前往帳本設定
+                </button>
+              </div>
+            ) : null}
+
+            {activeTab === 'home' && activeLedger && (
+              <HomeView
+                activeLedger={activeLedger}
+                currencySymbol={currencySymbol}
+                selectedMonth={selectedMonth}
+                setSelectedMonth={setSelectedMonth}
+                shiftMonth={shiftMonth}
+                customDateRange={customDateRange}
+                setCustomDateRange={setCustomDateRange}
+                summary={summary}
+                transactions={periodTransactions}
+                onAddClick={() => {
+                  if (!activeLedger) {
+                    showToast('請先選擇或建立帳本');
+                    return;
+                  }
+                  setEditingTx(null);
+                  setTxModalOpen(true);
+                }}
+                onEditClick={(tx) => { setEditingTx(tx); setTxModalOpen(true); }}
+                onDeleteClick={async (tx) => {
+                  const ok = await askConfirm({
+                    title: '刪除收支紀錄',
+                    message: `確定要刪除「${tx.item_name || tx.sub_category}」(${currencySymbol}${Number(tx.amount).toLocaleString()}) 嗎？刪除後無法復原。`,
+                    danger: true,
+                    confirmText: '確認刪除',
+                  });
+                  if (ok) {
+                    try {
+                      await firebase.firestore().collection('transactions').doc(tx.id).delete();
+                      showToast('已刪除該筆收支紀錄');
+                    } catch (err) {
+                      showToast('刪除失敗：' + err.message);
+                    }
+                  }
+                }}
+              />
+            )}
+
+            {activeTab === 'categories' && activeLedger && (
+              <CategoryDetailView
+                categories={categories}
+                transactions={transactions}
+                onSelectTx={(tx) => setDetailTx(tx)}
+              />
+            )}
+
+            {activeTab === 'stats' && activeLedger && (
+              <StatsView
+                activeLedger={activeLedger}
+                currencySymbol={currencySymbol}
+                selectedMonth={selectedMonth}
+                shiftMonth={shiftMonth}
+                setSelectedMonth={setSelectedMonth}
+                transactions={transactions.filter((t) => t.date.startsWith(selectedMonth))}
+              />
+            )}
+
+            {activeTab === 'budgets' && activeLedger && (
+              <BudgetView
+                activeLedger={activeLedger}
+                currencySymbol={currencySymbol}
+                selectedMonth={selectedMonth}
+                shiftMonth={shiftMonth}
+                categories={categories}
+                transactions={transactions.filter((t) => t.date.startsWith(selectedMonth) && t.type === 'expense')}
+                budgetDoc={budgetDoc}
+                showToast={showToast}
+              />
+            )}
+
+            {activeTab === 'search' && activeLedger && (
+              <SearchView
+                activeLedger={activeLedger}
+                currencySymbol={currencySymbol}
+                transactions={transactions}
+                categories={categories}
+                paymentMethods={paymentMethods}
+                onEditClick={(tx) => { setEditingTx(tx); setTxModalOpen(true); }}
+                onDeleteClick={async (tx) => {
+                  const ok = await askConfirm({
+                    title: '刪除收支紀錄',
+                    message: '確定要刪除此筆交易嗎？',
+                    danger: true,
+                    confirmText: '確認刪除',
+                  });
+                  if (ok) {
+                    try {
+                      await firebase.firestore().collection('transactions').doc(tx.id).delete();
+                      showToast('已刪除交易紀錄');
+                    } catch (err) {
+                      showToast('刪除失敗：' + err.message);
+                    }
+                  }
+                }}
+              />
+            )}
+
+            {activeTab === 'settings' && (
+              <SettingsView
+                user={user}
+                profile={profile}
+                ledgers={ledgers}
+                activeLedger={activeLedger}
+                setActiveLedgerId={setActiveLedgerId}
+                invitations={invitations}
+                categories={categories}
+                paymentMethods={paymentMethods}
+                transactions={transactions}
+                theme={theme}
+                setTheme={setTheme}
+                showToast={showToast}
+                askConfirm={askConfirm}
+                askPrompt={askPrompt}
+              />
+            )}
+          </main>
+
+          {/* 手機版底部導覽列 */}
+          <nav className="md:hidden fixed bottom-0 inset-x-0 z-20 bg-white/95 dark:bg-neutral-800/95 backdrop-blur border-t border-latte-200 dark:border-neutral-700 grid grid-cols-4 py-2 text-xs">
+            {navItems.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`flex flex-col items-center justify-center py-1 font-medium relative ${
+                  activeTab === item.id ? 'text-latte-700 dark:text-latte-300 font-bold' : 'text-neutral-500'
+                }`}
+              >
+                <span>{item.label}</span>
+                {item.id === 'settings' && invitations.length > 0 && (
+                  <span className="absolute top-0 right-2 w-2 h-2 rounded-full bg-red-500"></span>
+                )}
+              </button>
+            ))}
+          </nav>
+
+          {/* 新增 / 編輯收支彈出視窗 */}
+          {txModalOpen && activeLedger && (
+            <TransactionModal
+              user={user}
+              profile={profile}
+              activeLedger={activeLedger}
+              categories={categories}
+              paymentMethods={paymentMethods}
+              editingTx={editingTx}
+              showToast={showToast}
+              onClose={() => { setTxModalOpen(false); setEditingTx(null); }}
+            />
+          )}
+        </div>
+      );
+    }
+
+    // ==================== 首頁視圖 ====================
+    function HomeView({ activeLedger, currencySymbol, selectedMonth, setSelectedMonth, shiftMonth, customDateRange, setCustomDateRange, summary, transactions, onAddClick, onEditClick, onDeleteClick }) {
+      const [showCustom, setShowCustom] = useState(false);
+
+      return (
+        <div className="space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button onClick={() => shiftMonth(-1)} className="px-3 py-1.5 rounded-xl bg-latte-200 dark:bg-neutral-700 text-sm font-medium">上個月</button>
+              <input
+                type="month"
+                value={selectedMonth}
+                onChange={(e) => {
+                  setCustomDateRange({ enabled: false, start: '', end: '' });
+                  setSelectedMonth(e.target.value);
+                }}
+                className="px-3 py-1.5 rounded-xl bg-white dark:bg-neutral-800 border border-latte-300 dark:border-neutral-600 text-sm font-semibold"
+              />
+              <button onClick={() => shiftMonth(1)} className="px-3 py-1.5 rounded-xl bg-latte-200 dark:bg-neutral-700 text-sm font-medium">下個月</button>
+              <button
+                onClick={() => {
+                  setCustomDateRange({ enabled: false, start: '', end: '' });
+                  setSelectedMonth(getYearMonthStr());
+                }}
+                className="px-3 py-1.5 rounded-xl border border-latte-300 dark:border-neutral-600 text-xs"
+              >
+                本月
+              </button>
+              <button
+                onClick={() => setShowCustom(!showCustom)}
+                className="px-3 py-1.5 rounded-xl border border-latte-300 dark:border-neutral-600 text-xs"
+              >
+                自訂區間
+              </button>
+            </div>
+
+            <button
+              onClick={onAddClick}
+              className="hidden md:inline-flex px-5 py-2.5 rounded-xl bg-latte-600 hover:bg-latte-700 text-white font-semibold shadow-sm transition"
+            >
+              + 新增收支
+            </button>
+          </div>
+
+          {showCustom && (
+            <div className="p-4 rounded-2xl bg-latte-100 dark:bg-neutral-800 flex flex-wrap items-center gap-3 text-sm">
+              <span>起始：</span>
+              <input
+                type="date"
+                value={customDateRange.start}
+                onChange={(e) => setCustomDateRange({ ...customDateRange, enabled: true, start: e.target.value })}
+                className="p-1.5 rounded-lg border dark:bg-neutral-700 dark:border-neutral-600"
+              />
+              <span>結束：</span>
+              <input
+                type="date"
+                value={customDateRange.end}
+                onChange={(e) => setCustomDateRange({ ...customDateRange, enabled: true, end: e.target.value })}
+                className="p-1.5 rounded-lg border dark:bg-neutral-700 dark:border-neutral-600"
+              />
+            </div>
+          )}
+
+          {/* 月度財務摘要：三個主要數字 */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="p-5 rounded-2xl bg-white dark:bg-neutral-800 border border-latte-200 dark:border-neutral-700 shadow-sm">
+              <div className="text-xs text-latte-500 dark:text-neutral-400">本月結餘</div>
+              <div className={`text-2xl font-bold mt-1 ${summary.balance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                {summary.balance >= 0 ? `+${currencySymbol}${summary.balance.toLocaleString()}` : `-${currencySymbol}${Math.abs(summary.balance).toLocaleString()}`}
+              </div>
+            </div>
+            <div className="p-5 rounded-2xl bg-white dark:bg-neutral-800 border border-latte-200 dark:border-neutral-700 shadow-sm">
+              <div className="text-xs text-latte-500 dark:text-neutral-400">本月收入總額</div>
+              <div className="text-2xl font-bold mt-1 text-emerald-600 dark:text-emerald-400">
+                +{currencySymbol}{summary.income.toLocaleString()}
+              </div>
+            </div>
+            <div className="p-5 rounded-2xl bg-white dark:bg-neutral-800 border border-latte-200 dark:border-neutral-700 shadow-sm">
+              <div className="text-xs text-latte-500 dark:text-neutral-400">本月支出總額</div>
+              <div className="text-2xl font-bold mt-1 text-rose-600 dark:text-rose-400">
+                -{currencySymbol}{summary.expense.toLocaleString()}
+              </div>
+            </div>
+          </div>
+
+          {/* 全部收支紀錄列表 */}
+          <div className="bg-white dark:bg-neutral-800 rounded-2xl border border-latte-200 dark:border-neutral-700 overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-latte-100 dark:border-neutral-700 font-semibold text-sm flex justify-between">
+              <span>收支明細（共 {transactions.length} 筆）</span>
+            </div>
+            {transactions.length === 0 ? (
+              <div className="p-8 text-center text-sm text-latte-500">此期間尚無收支紀錄</div>
+            ) : (
+              <div className="divide-y divide-latte-100 dark:divide-neutral-700">
+                {transactions.map((tx) => (
+                  <div key={tx.id} className="p-4 flex items-center justify-between gap-4 hover:bg-latte-50/70 dark:hover:bg-neutral-700/40">
+                    <div className="space-y-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-latte-900 dark:text-white truncate">
+                          {tx.item_name || tx.sub_category}
+                        </span>
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-latte-100 dark:bg-neutral-700 text-latte-700 dark:text-latte-300">
+                          {tx.major_category} · {tx.sub_category}
+                        </span>
+                        {activeLedger?.type === 'couple' && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300">
+                            付款人：{tx.payer_nickname}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-latte-500 dark:text-neutral-400 flex gap-3 flex-wrap">
+                        <span>{tx.date}</span>
+                        <span>{tx.payment_method}</span>
+                        {tx.note && <span className="truncate">備註：{tx.note}</span>}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className={`font-bold text-base ${tx.type === 'income' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                        {tx.type === 'income' ? `+${currencySymbol}${Number(tx.amount).toLocaleString()}` : `-${currencySymbol}${Number(tx.amount).toLocaleString()}`}
+                      </span>
+                      <button onClick={() => onEditClick(tx)} className="text-xs text-latte-600 hover:underline">編輯</button>
+                      <button onClick={() => onDeleteClick(tx)} className="text-xs text-rose-600 hover:underline">刪除</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // ==================== 新增 / 編輯收支彈出視窗 ====================
+    function TransactionModal({ user, profile, activeLedger, categories, paymentMethods, editingTx, showToast, onClose }) {
+      const [type, setType] = useState(editingTx?.type || 'expense');
+      const [amount, setAmount] = useState(editingTx?.amount || '');
+      const [date, setDate] = useState(editingTx?.date || getTodayStr());
+      const [itemName, setItemName] = useState(editingTx?.item_name || '');
+      const [note, setNote] = useState(editingTx?.note || '');
+
+      const filteredCats = useMemo(() => categories.filter((c) => c.type === type && !c.is_archived), [categories, type]);
+      const majors = useMemo(() => [...new Set(filteredCats.map((c) => c.major))], [filteredCats]);
+
+      const [major, setMajor] = useState(editingTx?.major_category || '');
+      const subs = useMemo(() => filteredCats.filter((c) => c.major === major).map((c) => c.sub), [filteredCats, major]);
+      const [sub, setSub] = useState(editingTx?.sub_category || '');
+
+      const activePms = useMemo(() => paymentMethods.filter((p) => p.is_active), [paymentMethods]);
+      const [paymentMethod, setPaymentMethod] = useState(editingTx?.payment_method || '');
+      const [saving, setSaving] = useState(false);
+
+      useEffect(() => {
+        if (majors.length > 0 && !majors.includes(major)) {
+          setMajor(majors[0]);
+        }
+      }, [type, majors]);
+
+      useEffect(() => {
+        if (subs.length > 0 && !subs.includes(sub)) {
+          setSub(subs[0]);
+        }
+      }, [major, subs]);
+
+      useEffect(() => {
+        if (activePms.length > 0 && !activePms.some((p) => p.name === paymentMethod)) {
+          const defaultCash = activePms.find((p) => p.name === '現金');
+          setPaymentMethod(defaultCash ? defaultCash.name : activePms[0].name);
+        }
+      }, [activePms]);
+
+      async function handleSubmit(e) {
+        e.preventDefault();
+        if (!amount || Number(amount) <= 0) {
+          showToast('請輸入大於 0 的有效金額');
+          return;
+        }
+        if (!major || !sub) {
+          showToast('請先選擇大分類與子分類（若無分類請先至設定新增）');
+          return;
+        }
+        if (!date) {
+          showToast('請選擇日期');
+          return;
+        }
+        if (!paymentMethod) {
+          showToast('請先選擇付款方式（若無方式請先至設定新增）');
+          return;
+        }
+        setSaving(true);
+        const db = firebase.firestore();
+        try {
+          if (editingTx) {
+            // 編輯時保留原本的 payer_id 與 payer_nickname
+            await db.collection('transactions').doc(editingTx.id).update({
+              type,
+              amount: Number(amount),
+              major_category: major,
+              sub_category: sub,
+              date,
+              item_name: itemName.trim(),
+              note: note.trim(),
+              payment_method: paymentMethod,
+            });
+            showToast('已更新交易紀錄');
+          } else {
+            await db.collection('transactions').add({
+              ledger_id: activeLedger.id,
+              type,
+              amount: Number(amount),
+              major_category: major,
+              sub_category: sub,
+              date,
+              item_name: itemName.trim(),
+              note: note.trim(),
+              payment_method: paymentMethod,
+              payer_id: user.uid,
+              payer_nickname: profile?.nickname || user.email.split('@')[0],
+              created_ms: Date.now(),
+            });
+            showToast('已新增交易紀錄');
+          }
+          onClose();
+        } catch (err) {
+          showToast('儲存失敗：' + err.message);
+        } finally {
+          setSaving(false);
+        }
+      }
+
+      return (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <form onSubmit={handleSubmit} noValidate className="bg-white dark:bg-neutral-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center">
+              <h2 className="font-bold text-lg">{editingTx ? '編輯收支' : '新增收支'}</h2>
+              <button type="button" onClick={onClose} className="text-neutral-400 hover:text-neutral-600">✕</button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-latte-100 dark:bg-neutral-700">
+              <button
+                type="button"
+                onClick={() => setType('expense')}
+                className={`py-2 rounded-lg font-semibold text-sm transition ${type === 'expense' ? 'bg-rose-600 text-white' : 'text-latte-700 dark:text-neutral-300'}`}
+              >
+                支出
+              </button>
+              <button
+                type="button"
+                onClick={() => setType('income')}
+                className={`py-2 rounded-lg font-semibold text-sm transition ${type === 'income' ? 'bg-emerald-600 text-white' : 'text-latte-700 dark:text-neutral-300'}`}
+              >
+                收入
+              </button>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium mb-1">金額 *</label>
+              <input
+                type="number"
+                step="any"
+                min="0.01"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="w-full p-2.5 rounded-xl border border-latte-300 dark:border-neutral-600 dark:bg-neutral-700 text-lg font-bold"
+                placeholder="0"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium mb-1">大分類 *</label>
+                <select
+                  value={major}
+                  onChange={(e) => setMajor(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-latte-300 dark:border-neutral-600 dark:bg-neutral-700 text-sm"
+                >
+                  {majors.length === 0 && <option value="">無可用分類</option>}
+                  {majors.map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1">子分類 *</label>
+                <select
+                  value={sub}
+                  onChange={(e) => setSub(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-latte-300 dark:border-neutral-600 dark:bg-neutral-700 text-sm"
+                >
+                  {subs.length === 0 && <option value="">無可用子分類</option>}
+                  {subs.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium mb-1">日期 *</label>
+                <input
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-latte-300 dark:border-neutral-600 dark:bg-neutral-700 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1">付款方式 *</label>
+                <select
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-latte-300 dark:border-neutral-600 dark:bg-neutral-700 text-sm"
+                >
+                  {activePms.length === 0 && <option value="">無可用付款方式</option>}
+                  {activePms.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium mb-1">項目名稱（選填）</label>
+              <input
+                type="text"
+                value={itemName}
+                onChange={(e) => setItemName(e.target.value)}
+                placeholder="例如：排骨便當、捷運悠遊卡"
+                className="w-full p-2.5 rounded-xl border border-latte-300 dark:border-neutral-600 dark:bg-neutral-700 text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium mb-1">備註（選填）</label>
+              <input
+                type="text"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                className="w-full p-2.5 rounded-xl border border-latte-300 dark:border-neutral-600 dark:bg-neutral-700 text-sm"
+              />
+            </div>
+
+            {activeLedger.type === 'couple' && (
+              <div className="text-xs text-latte-600 dark:text-neutral-400 bg-latte-50 dark:bg-neutral-700/50 p-2.5 rounded-xl">
+                共同帳本付款人：{editingTx ? editingTx.payer_nickname : (profile?.nickname || user.email)}（系統自動記錄）
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={saving}
+              className="w-full py-3 rounded-xl bg-latte-600 hover:bg-latte-700 text-white font-semibold transition"
+            >
+              {saving ? '儲存中...' : '儲存紀錄'}
+            </button>
+          </form>
+        </div>
+      );
+    }
+
+    // ==================== 純文字統計頁面（無圖表） ====================
+    function StatsView({ activeLedger, currencySymbol, selectedMonth, shiftMonth, setSelectedMonth, transactions }) {
+      const stats = useMemo(() => {
+        let incomeTotal = 0;
+        let expenseTotal = 0;
+        const expenseTree = {};
+        const incomeTree = {};
+        const memberPaid = {};
+
+        transactions.forEach((tx) => {
+          const amt = Number(tx.amount) || 0;
+          if (tx.type === 'income') {
+            incomeTotal += amt;
+            if (!incomeTree[tx.major_category]) incomeTree[tx.major_category] = { total: 0, subs: {} };
+            incomeTree[tx.major_category].total += amt;
+            incomeTree[tx.major_category].subs[tx.sub_category] = (incomeTree[tx.major_category].subs[tx.sub_category] || 0) + amt;
+          } else {
+            expenseTotal += amt;
+            if (!expenseTree[tx.major_category]) expenseTree[tx.major_category] = { total: 0, subs: {} };
+            expenseTree[tx.major_category].total += amt;
+            expenseTree[tx.major_category].subs[tx.sub_category] = (expenseTree[tx.major_category].subs[tx.sub_category] || 0) + amt;
+
+            if (activeLedger?.type === 'couple') {
+              const name = tx.payer_nickname || '成員';
+              memberPaid[name] = (memberPaid[name] || 0) + amt;
+            }
+          }
+        });
+
+        return { incomeTotal, expenseTotal, balance: incomeTotal - expenseTotal, expenseTree, incomeTree, memberPaid };
+      }, [transactions, activeLedger]);
+
+      return (
+        <div className="space-y-6">
+          <div className="flex items-center gap-2">
+            <button onClick={() => shiftMonth(-1)} className="px-3 py-1.5 rounded-xl bg-latte-200 dark:bg-neutral-700 text-sm">上個月</button>
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="px-3 py-1.5 rounded-xl bg-white dark:bg-neutral-800 border border-latte-300 dark:border-neutral-600 text-sm font-semibold"
+            />
+            <button onClick={() => shiftMonth(1)} className="px-3 py-1.5 rounded-xl bg-latte-200 dark:bg-neutral-700 text-sm">下個月</button>
+          </div>
+
+          <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-2 text-sm">
+            <div className="flex justify-between"><span>本月收入總額：</span><span className="font-bold text-emerald-600">+{currencySymbol}{stats.incomeTotal.toLocaleString()}</span></div>
+            <div className="flex justify-between"><span>本月支出總額：</span><span className="font-bold text-rose-600">-{currencySymbol}{stats.expenseTotal.toLocaleString()}</span></div>
+            <div className="flex justify-between border-t border-latte-100 dark:border-neutral-700 pt-2">
+              <span>本月結餘：</span>
+              <span className="font-bold">{stats.balance >= 0 ? `+${currencySymbol}${stats.balance.toLocaleString()}` : `-${currencySymbol}${Math.abs(stats.balance).toLocaleString()}`}</span>
+            </div>
+          </div>
+
+          {activeLedger?.type === 'couple' && (
+            <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-2 text-sm">
+              <h3 className="font-bold text-base mb-2">共同帳本成員實際付款統計</h3>
+              <div className="flex justify-between font-semibold">
+                <span>共同支出總額：</span>
+                <span>{currencySymbol}{stats.expenseTotal.toLocaleString()}</span>
+              </div>
+              {Object.entries(stats.memberPaid).map(([name, amt]) => (
+                <div key={name} className="flex justify-between pl-3 text-latte-700 dark:text-neutral-300">
+                  <span>- {name}：</span>
+                  <span>{currencySymbol}{amt.toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-3 text-sm">
+              <h3 className="font-bold text-base text-rose-600">支出分類統計</h3>
+              {Object.keys(stats.expenseTree).length === 0 && <div className="text-latte-500">本月無支出紀錄</div>}
+              {Object.entries(stats.expenseTree).map(([major, data]) => (
+                <div key={major} className="space-y-1">
+                  <div className="font-bold flex justify-between">
+                    <span>{major}：</span>
+                    <span>{currencySymbol}{data.total.toLocaleString()}</span>
+                  </div>
+                  {Object.entries(data.subs).map(([sub, subAmt]) => (
+                    <div key={sub} className="flex justify-between pl-4 text-latte-600 dark:text-neutral-400">
+                      <span>- {sub}：</span>
+                      <span>{currencySymbol}{subAmt.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+
+            <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-3 text-sm">
+              <h3 className="font-bold text-base text-emerald-600">收入分類統計</h3>
+              {Object.keys(stats.incomeTree).length === 0 && <div className="text-latte-500">本月無收入紀錄</div>}
+              {Object.entries(stats.incomeTree).map(([major, data]) => (
+                <div key={major} className="space-y-1">
+                  <div className="font-bold flex justify-between">
+                    <span>{major}：</span>
+                    <span>{currencySymbol}{data.total.toLocaleString()}</span>
+                  </div>
+                  {Object.entries(data.subs).map(([sub, subAmt]) => (
+                    <div key={sub} className="flex justify-between pl-4 text-latte-600 dark:text-neutral-400">
+                      <span>- {sub}：</span>
+                      <span>{currencySymbol}{subAmt.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ==================== 預算管理系統 ====================
+    function BudgetView({ activeLedger, currencySymbol, selectedMonth, shiftMonth, categories, transactions, budgetDoc, showToast }) {
+      const [totalInput, setTotalInput] = useState(0);
+      const [majorsInput, setMajorsInput] = useState({});
+      const [subsInput, setSubsInput] = useState({});
+      const [expandedMajors, setExpandedMajors] = useState({});
+
+      useEffect(() => {
+        if (budgetDoc) {
+          setTotalInput(budgetDoc.total || 0);
+          setMajorsInput(budgetDoc.majors || {});
+          setSubsInput(budgetDoc.subs || {});
+        }
+      }, [budgetDoc]);
+
+      const toggleMajorExpand = (majorName) => {
+        setExpandedMajors((prev) => ({
+          ...prev,
+          [majorName]: !prev[majorName],
+        }));
+      };
+
+      const expenseCats = useMemo(() => categories.filter((c) => c.type === 'expense' && !c.is_archived), [categories]);
+      const majors = useMemo(() => [...new Set(expenseCats.map((c) => c.major))], [expenseCats]);
+
+      const actualTotal = useMemo(() => transactions.reduce((acc, t) => acc + (Number(t.amount) || 0), 0), [transactions]);
+      const actualByMajor = useMemo(() => {
+        const map = {};
+        transactions.forEach((t) => { map[t.major_category] = (map[t.major_category] || 0) + (Number(t.amount) || 0); });
+        return map;
+      }, [transactions]);
+      const actualBySub = useMemo(() => {
+        const map = {};
+        transactions.forEach((t) => {
+          const key = `${t.major_category}::${t.sub_category}`;
+          map[key] = (map[key] || 0) + (Number(t.amount) || 0);
+        });
+        return map;
+      }, [transactions]);
+
+      async function saveBudgets() {
+        if (!activeLedger) return;
+        try {
+          const budgetId = `${activeLedger.id}_${selectedMonth}`;
+          await firebase.firestore().collection('budgets').doc(budgetId).set({
+            ledger_id: activeLedger.id,
+            month: selectedMonth,
+            total: Number(totalInput) || 0,
+            majors: majorsInput,
+            subs: subsInput,
+          });
+          showToast('本月預算設定已儲存');
+        } catch (err) {
+          showToast('儲存預算失敗：' + err.message);
+        }
+      }
+
+      function renderProgressBar(label, budgetAmt, usedAmt) {
+        const b = Number(budgetAmt) || 0;
+        if (b <= 0) return null;
+        const pct = Math.round((usedAmt / b) * 100);
+        const remaining = b - usedAmt;
+        let barColor = 'bg-emerald-500';
+        if (pct >= 100) barColor = 'bg-rose-600';
+        else if (pct >= 70) barColor = 'bg-amber-500';
+
+        return (
+          <div key={label} className="p-4 rounded-xl bg-latte-50 dark:bg-neutral-700/50 space-y-2 text-sm">
+            <div className="flex justify-between font-semibold">
+              <span>{label}</span>
+              <span>使用率：{pct}%</span>
+            </div>
+            <div className="w-full h-3 rounded-full bg-latte-200 dark:bg-neutral-600 overflow-hidden">
+              <div className={`h-full ${barColor} transition-all`} style={{ width: `${Math.min(pct, 100)}%` }}></div>
+            </div>
+            <div className="flex justify-between text-xs text-latte-600 dark:text-neutral-300">
+              <span>預算：{currencySymbol}{b.toLocaleString()}</span>
+              <span>已用：{currencySymbol}{usedAmt.toLocaleString()}</span>
+              <span>剩餘：{currencySymbol}{remaining.toLocaleString()}</span>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <button onClick={() => shiftMonth(-1)} className="px-3 py-1.5 rounded-xl bg-latte-200 dark:bg-neutral-700 text-sm">上個月</button>
+              <span className="font-bold text-base">{selectedMonth} 預算管理</span>
+              <button onClick={() => shiftMonth(1)} className="px-3 py-1.5 rounded-xl bg-latte-200 dark:bg-neutral-700 text-sm">下個月</button>
+            </div>
+            <button onClick={saveBudgets} className="px-4 py-2 rounded-xl bg-latte-600 text-white text-sm font-semibold">儲存預算設定</button>
+          </div>
+
+          <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-3">
+            <h3 className="font-bold text-base">本月預算執行進度</h3>
+            {renderProgressBar('每月總支出預算', totalInput, actualTotal)}
+            {majors.map((m) => renderProgressBar(`大分類：${m}`, majorsInput[m], actualByMajor[m] || 0))}
+            {expenseCats.map((c) => {
+              const key = `${c.major}::${c.sub}`;
+              return renderProgressBar(`子分類：${c.major} - ${c.sub}`, subsInput[key], actualBySub[key] || 0);
+            })}
+          </div>
+
+          <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-4 text-sm">
+            <h3 className="font-bold text-base">設定預算上限（設為 0 表示不限制）</h3>
+            <div className="flex items-center justify-between gap-4 border-b border-latte-100 dark:border-neutral-700 pb-3">
+              <span className="font-bold">每月總支出預算</span>
+              <input
+                type="number"
+                min="0"
+                value={totalInput}
+                onChange={(e) => setTotalInput(e.target.value)}
+                className="w-36 p-2 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600 text-right"
+              />
+            </div>
+
+            {majors.map((m) => {
+              const isExpanded = !!expandedMajors[m];
+              const subItems = expenseCats.filter((c) => c.major === m);
+              return (
+                <div key={m} className="space-y-2 border-b border-latte-100 dark:border-neutral-700 pb-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <button
+                      type="button"
+                      onClick={() => toggleMajorExpand(m)}
+                      className="flex items-center gap-2 font-semibold text-left hover:text-latte-600 dark:hover:text-latte-300 py-1"
+                    >
+                      <span className="text-xs w-4 inline-block text-latte-500">
+                        {isExpanded ? '▼' : '▶'}
+                      </span>
+                      <span>大分類：{m}</span>
+                      <span className="text-xs font-normal text-latte-400">
+                        ({subItems.length} 項子分類)
+                      </span>
+                    </button>
+                    <input
+                      type="number"
+                      min="0"
+                      value={majorsInput[m] || ''}
+                      placeholder="0"
+                      onChange={(e) => setMajorsInput({ ...majorsInput, [m]: Number(e.target.value) || 0 })}
+                      className="w-36 p-2 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600 text-right"
+                    />
+                  </div>
+                  {isExpanded && (
+                    <div className="pl-6 space-y-1.5 pt-1">
+                      {subItems.map((c) => {
+                        const key = `${c.major}::${c.sub}`;
+                        return (
+                          <div key={key} className="flex items-center justify-between gap-4 text-xs text-latte-600 dark:text-neutral-300">
+                            <span>- 子分類：{c.sub}</span>
+                            <input
+                              type="number"
+                              min="0"
+                              value={subsInput[key] || ''}
+                              placeholder="0"
+                              onChange={(e) => setSubsInput({ ...subsInput, [key]: Number(e.target.value) || 0 })}
+                              className="w-32 p-1.5 rounded-lg border dark:bg-neutral-700 dark:border-neutral-600 text-right"
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    // ==================== 搜尋及篩選功能 ====================
+    function SearchView({ activeLedger, currencySymbol, transactions, categories, paymentMethods, onEditClick, onDeleteClick }) {
+      const [keyword, setKeyword] = useState('');
+      const [startDate, setStartDate] = useState('');
+      const [endDate, setEndDate] = useState('');
+      const [type, setType] = useState('all');
+      const [major, setMajor] = useState('');
+      const [sub, setSub] = useState('');
+      const [pm, setPm] = useState('');
+
+      const results = useMemo(() => {
+        return transactions.filter((t) => {
+          if (keyword && !(t.item_name || '').toLowerCase().includes(keyword.toLowerCase()) && !(t.note || '').toLowerCase().includes(keyword.toLowerCase())) return false;
+          if (startDate && t.date < startDate) return false;
+          if (endDate && t.date > endDate) return false;
+          if (type !== 'all' && t.type !== type) return false;
+          if (major && t.major_category !== major) return false;
+          if (sub && t.sub_category !== sub) return false;
+          if (pm && t.payment_method !== pm) return false;
+          return true;
+        });
+      }, [transactions, keyword, startDate, endDate, type, major, sub, pm]);
+
+      const majors = useMemo(() => [...new Set(categories.map((c) => c.major))], [categories]);
+      const subs = useMemo(() => [...new Set(categories.filter((c) => !major || c.major === major).map((c) => c.sub))], [categories, major]);
+
+      return (
+        <div className="space-y-6">
+          <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+            <input
+              type="text"
+              placeholder="搜尋項目名稱或備註..."
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              className="p-2.5 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600"
+            />
+            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="p-2.5 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600" />
+            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="p-2.5 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600" />
+
+            <select value={type} onChange={(e) => setType(e.target.value)} className="p-2.5 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600">
+              <option value="all">全部收支類型</option>
+              <option value="expense">僅支出</option>
+              <option value="income">僅收入</option>
+            </select>
+
+            <select value={major} onChange={(e) => { setMajor(e.target.value); setSub(''); }} className="p-2.5 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600">
+              <option value="">全部大分類</option>
+              {majors.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+
+            <select value={sub} onChange={(e) => setSub(e.target.value)} className="p-2.5 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600">
+              <option value="">全部子分類</option>
+              {subs.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+
+            <select value={pm} onChange={(e) => setPm(e.target.value)} className="p-2.5 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600">
+              <option value="">全部付款方式</option>
+              {paymentMethods.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
+            </select>
+          </div>
+
+          <div className="bg-white dark:bg-neutral-800 rounded-2xl border border-latte-200 dark:border-neutral-700 divide-y divide-latte-100 dark:divide-neutral-700">
+            <div className="px-5 py-3 text-sm font-semibold">搜尋結果（共 {results.length} 筆）</div>
+            {results.map((tx) => (
+              <div key={tx.id} className="p-4 flex items-center justify-between gap-4">
+                <div>
+                  <div className="font-semibold text-sm">{tx.item_name || tx.sub_category} <span className="text-xs text-latte-500">({tx.major_category}/{tx.sub_category})</span></div>
+                  <div className="text-xs text-latte-500">{tx.date} · {tx.payment_method} {activeLedger?.type === 'couple' ? `· 付款人：${tx.payer_nickname}` : ''}</div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className={`font-bold text-sm ${tx.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    {tx.type === 'income' ? `+${currencySymbol}${tx.amount}` : `-${currencySymbol}${tx.amount}`}
+                  </span>
+                  <button onClick={() => onEditClick(tx)} className="text-xs text-latte-600 hover:underline">編輯</button>
+                  <button onClick={() => onDeleteClick(tx)} className="text-xs text-rose-600 hover:underline">刪除</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // ==================== 設定、共同帳本、分類付款方式管理、匯出與備份還原 ====================
+    function SettingsView({ user, profile, ledgers, activeLedger, setActiveLedgerId, invitations, categories, paymentMethods, transactions, theme, setTheme, showToast, askConfirm, askPrompt }) {
+      const [nicknameInput, setNicknameInput] = useState(profile?.nickname || '');
+      const [newCoupleLedgerName, setNewCoupleLedgerName] = useState('');
+      const [inviteEmail, setInviteEmail] = useState('');
+
+      const [catType, setCatType] = useState('expense');
+      const [catMajor, setCatMajor] = useState('');
+      const [catSub, setCatSub] = useState('');
+
+      const [newPmName, setNewPmName] = useState('');
+      const [exportStart, setExportStart] = useState('');
+      const [exportEnd, setExportEnd] = useState('');
+      const [restorePreview, setRestorePreview] = useState(null);
+
+      useEffect(() => {
+        if (profile?.nickname) setNicknameInput(profile.nickname);
+      }, [profile]);
+
+      const isOwner = activeLedger?.owner_id === user.uid;
+
+      async function saveNickname() {
+        if (!nicknameInput.trim()) return;
+        try {
+          await firebase.firestore().collection('profiles').doc(user.uid).update({ nickname: nicknameInput.trim() });
+          showToast('顯示暱稱已更新');
+        } catch (err) {
+          showToast('更新暱稱失敗：' + err.message);
+        }
+      }
+
+      async function updateLedgerName(ledger) {
+        if (ledger.owner_id !== user.uid) {
+          showToast('只有帳本擁有者可以修改帳本名稱');
+          return;
+        }
+        const newName = await askPrompt({
+          title: '修改帳本名稱',
+          defaultValue: ledger.name,
+        });
+        if (!newName || !newName.trim()) return;
+        try {
+          await firebase.firestore().collection('ledgers').doc(ledger.id).update({
+            name: newName.trim(),
+            updated_at: firebase.firestore.FieldValue.serverTimestamp(),
+          });
+          showToast('帳本名稱已更新');
+        } catch (err) {
+          showToast('更新帳本名稱失敗：' + err.message);
+        }
+      }
+
+      async function createCoupleLedger() {
+        if (!newCoupleLedgerName.trim()) {
+          showToast('請先輸入共同帳本名稱');
+          return;
+        }
+        try {
+          const db = firebase.firestore();
+          const ledgerRef = db.collection('ledgers').doc();
+          const myNick = profile?.nickname || user.email.split('@')[0];
+
+          // 先建立共同帳本主表
+          await ledgerRef.set({
+            name: newCoupleLedgerName.trim(),
+            type: 'couple',
+            owner_id: user.uid,
+            memberIds: [user.uid],
+            members: { [user.uid]: { role: 'owner', email: user.email, nickname: myNick } },
+            max_members: 5,
+            currency: 'TWD',
+            is_archived: false,
+            created_at: firebase.firestore.FieldValue.serverTimestamp(),
+          });
+
+          const batch = db.batch();
+          DEFAULT_CATEGORIES.forEach((cat) => {
+            cat.subs.forEach((sub) => {
+              batch.set(db.collection('categories').doc(), {
+                ledger_id: ledgerRef.id,
+                type: cat.type,
+                major: cat.major,
+                sub,
+                is_archived: false,
+              });
+            });
+          });
+
+          DEFAULT_PAYMENT_METHODS.forEach((pm) => {
+            batch.set(db.collection('payment_methods').doc(), {
+              ledger_id: ledgerRef.id,
+              name: pm,
+              is_active: true,
+            });
+          });
+
+          await batch.commit();
+          setNewCoupleLedgerName('');
+          setActiveLedgerId(ledgerRef.id);
+          showToast('已建立情侶共同帳本');
+        } catch (err) {
+          showToast('建立共同帳本失敗：' + err.message);
+        }
+      }
+
+      async function sendInvitation() {
+        if (!inviteEmail.trim()) {
+          showToast('請輸入邀請對象的 Google Email');
+          return;
+        }
+        if (!isOwner || activeLedger?.type !== 'couple') return;
+        if ((activeLedger.memberIds || []).length >= 5) {
+          showToast('共同帳本最多只能有 5 位成員（含擁有者）');
+          return;
+        }
+        try {
+          await firebase.firestore().collection('ledger_invitations').add({
+            ledger_id: activeLedger.id,
+            ledger_name: activeLedger.name,
+            inviter_id: user.uid,
+            inviter_nickname: profile?.nickname || user.email,
+            invitee_email: inviteEmail.trim().toLowerCase(),
+            status: 'pending',
+            created_at: firebase.firestore.FieldValue.serverTimestamp(),
+          });
+          setInviteEmail('');
+          showToast('已發送邀請！對方登入後即可接受加入');
+        } catch (err) {
+          showToast('發送邀請失敗：' + err.message);
+        }
+      }
+
+      async function acceptInvitation(inv) {
+        try {
+          const db = firebase.firestore();
+          const ledgerRef = db.collection('ledgers').doc(inv.ledger_id);
+          const snap = await ledgerRef.get();
+          if (!snap.exists) {
+            showToast('找不到該共同帳本（可能已被刪除）');
+            return;
+          }
+          const data = snap.data();
+          if ((data.memberIds || []).length >= 5) {
+            showToast('此共同帳本成員已滿 5 人上限');
+            return;
+          }
+          const myNick = profile?.nickname || user.email.split('@')[0];
+          await ledgerRef.update({
+            memberIds: firebase.firestore.FieldValue.arrayUnion(user.uid),
+            [`members.${user.uid}`]: { role: 'member', email: user.email, nickname: myNick },
+          });
+          await db.collection('ledger_invitations').doc(inv.id).update({ status: 'accepted' });
+          setActiveLedgerId(inv.ledger_id);
+          showToast(`已成功加入「${inv.ledger_name}」`);
+        } catch (err) {
+          showToast('加入帳本失敗：' + err.message);
+        }
+      }
+
+      async function removeMember(targetUid) {
+        if (!isOwner || targetUid === user.uid) return;
+        const ok = await askConfirm({
+          title: '移除共同帳本成員',
+          message: '確定要移除此成員嗎？移除後對方將立即失去存取權限，但歷史交易紀錄會完整保留。',
+          danger: true,
+          confirmText: '確認移除',
+        });
+        if (!ok) return;
+        try {
+          const updatedMembers = { ...(activeLedger.members || {}) };
+          delete updatedMembers[targetUid];
+          await firebase.firestore().collection('ledgers').doc(activeLedger.id).update({
+            memberIds: firebase.firestore.FieldValue.arrayRemove(targetUid),
+            members: updatedMembers,
+          });
+          showToast('已移除該成員');
+        } catch (err) {
+          showToast('移除成員失敗：' + err.message);
+        }
+      }
+
+      async function changeCurrency(newCode) {
+        if (!isOwner) return;
+        const ok = await askConfirm({
+          title: '變更帳本幣別',
+          message: `確定將幣別改為 ${newCode} 嗎？\n提醒：原有交易金額不會自動進行匯率換算。`,
+          confirmText: '確認變更',
+        });
+        if (!ok) return;
+        try {
+          await firebase.firestore().collection('ledgers').doc(activeLedger.id).update({ currency: newCode });
+          showToast(`幣別已變更為 ${newCode}`);
+        } catch (err) {
+          showToast('變更幣別失敗：' + err.message);
+        }
+      }
+
+      async function toggleArchiveLedger(ledger, archiveState) {
+        try {
+          await firebase.firestore().collection('ledgers').doc(ledger.id).update({ is_archived: archiveState });
+          showToast(archiveState ? '已封存帳本' : '已解除封存');
+        } catch (err) {
+          showToast('操作失敗：' + err.message);
+        }
+      }
+
+      async function permanentlyDeleteLedger(ledger) {
+        if (ledger.owner_id !== user.uid) return;
+        const ok1 = await askConfirm({
+          title: `永久刪除「${ledger.name}」`,
+          message: '【警告】所有交易、分類與預算將一併刪除且無法復原！確定要繼續嗎？',
+          danger: true,
+          confirmText: '繼續刪除',
+        });
+        if (!ok1) return;
+        const ok2 = await askConfirm({
+          title: '最後確認：不可逆操作',
+          message: `請再次確認：真的要永久刪除「${ledger.name}」？`,
+          danger: true,
+          confirmText: '確認永久刪除',
+        });
+        if (!ok2) return;
+
+        try {
+          const db = firebase.firestore();
+          const collections = ['transactions', 'categories', 'payment_methods', 'budgets'];
+          for (const col of collections) {
+            const snap = await db.collection(col).where('ledger_id', '==', ledger.id).get();
+            const batch = db.batch();
+            snap.docs.forEach((d) => batch.delete(d.ref));
+            await batch.commit();
+          }
+          await db.collection('ledgers').doc(ledger.id).delete();
+          showToast(`已永久刪除「${ledger.name}」`);
+        } catch (err) {
+          showToast('永久刪除失敗：' + err.message);
+        }
+      }
+
+      function handleExport(format) {
+        if (!activeLedger) {
+          showToast('請先選擇要匯出的帳本');
+          return;
+        }
+        if (typeof XLSX === 'undefined') {
+          showToast('匯出元件尚未載入完成，請稍後再試');
+          return;
+        }
+        const filtered = transactions.filter((t) => {
+          if (exportStart && t.date < exportStart) return false;
+          if (exportEnd && t.date > exportEnd) return false;
+          return true;
+        });
+
+        if (filtered.length === 0) {
+          showToast('此日期區間沒有可匯出的資料');
+          return;
+        }
+
+        const rows = filtered.map((t) => {
+          const base = {
+            '日期': t.date,
+            '收支類型': t.type === 'income' ? '收入' : '支出',
+            '大分類': t.major_category,
+            '子分類': t.sub_category,
+            '項目名稱': t.item_name || '',
+            '金額': Number(t.amount) || 0,
+            '備註': t.note || '',
+            '付款方式': t.payment_method,
+          };
+          if (activeLedger?.type === 'couple') {
+            base['付款人'] = t.payer_nickname || '';
+          }
+          return base;
+        });
+
+        const ws = XLSX.utils.json_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, '收支明細');
+        const filename = `${activeLedger.name}_匯出_${getTodayStr()}.${format}`;
+        XLSX.writeFile(wb, filename, { bookType: format });
+        showToast(`已匯出 ${filename}`);
+      }
+
+      async function handleBackupDownload() {
+        if (!activeLedger) {
+          showToast('請先選擇要備份的帳本');
+          return;
+        }
+        try {
+          const db = firebase.firestore();
+          const budgetsSnap = await db.collection('budgets').where('ledger_id', '==', activeLedger.id).get();
+          const backupObj = {
+            version: '1.0',
+            exported_at: new Date().toISOString(),
+            ledger_name: activeLedger.name,
+            ledger_type: activeLedger.type,
+            currency: activeLedger.currency,
+            categories: categories.map(({ id, ledger_id, ...rest }) => rest),
+            payment_methods: paymentMethods.map(({ id, ledger_id, ...rest }) => rest),
+            transactions: transactions.map(({ id, ledger_id, ...rest }) => rest),
+            budgets: budgetsSnap.docs.map((d) => {
+              const { ledger_id, ...rest } = d.data();
+              return rest;
+            }),
+          };
+          const blob = new Blob([JSON.stringify(backupObj, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${activeLedger.name}_完整備份_${getTodayStr()}.json`;
+          a.click();
+          showToast('已下載完整備份檔案');
+        } catch (err) {
+          showToast('下載備份失敗：' + err.message);
+        }
+      }
+
+      function handleBackupFileSelect(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          try {
+            const data = JSON.parse(ev.target.result);
+            if (!Array.isArray(data.transactions) || !Array.isArray(data.categories)) {
+              showToast('備份檔案格式不正確');
+              return;
+            }
+            setRestorePreview(data);
+          } catch (err) {
+            showToast('無法解析備份檔案：' + err.message);
+          }
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+      }
+
+      async function executeRestore() {
+        if (!restorePreview || !activeLedger) return;
+        const ok = await askConfirm({
+          title: '確認覆蓋並還原',
+          message: `確定要還原備份至「${activeLedger.name}」嗎？此動作將會覆蓋目前帳本內的現有交易、分類與付款方式。`,
+          danger: true,
+          confirmText: '確認還原',
+        });
+        if (!ok) return;
+
+        const db = firebase.firestore();
+        const targetId = activeLedger.id;
+
+        for (const col of ['transactions', 'categories', 'payment_methods', 'budgets']) {
+          const snap = await db.collection(col).where('ledger_id', '==', targetId).get();
+          const delBatch = db.batch();
+          snap.docs.forEach((d) => delBatch.delete(d.ref));
+          await delBatch.commit();
+        }
+
+        const addBatch = db.batch();
+        (restorePreview.categories || []).forEach((c) => {
+          addBatch.set(db.collection('categories').doc(), { ...c, ledger_id: targetId });
+        });
+        (restorePreview.payment_methods || []).forEach((p) => {
+          addBatch.set(db.collection('payment_methods').doc(), { ...p, ledger_id: targetId });
+        });
+        (restorePreview.transactions || []).forEach((t) => {
+          addBatch.set(db.collection('transactions').doc(), { ...t, ledger_id: targetId });
+        });
+        (restorePreview.budgets || []).forEach((b) => {
+          addBatch.set(db.collection('budgets').doc(`${targetId}_${b.month}`), { ...b, ledger_id: targetId });
+        });
+        await addBatch.commit();
+
+        setRestorePreview(null);
+        showToast('備份還原完成！');
+      }
+
+      return (
+        <div className="space-y-6 text-sm">
+          {invitations.length > 0 && (
+            <div className="p-5 rounded-2xl bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 space-y-3">
+              <h3 className="font-bold text-base">收到共同帳本邀請</h3>
+              {invitations.map((inv) => (
+                <div key={inv.id} className="flex items-center justify-between gap-2">
+                  <span><strong>{inv.inviter_nickname}</strong> 邀請您加入「<strong>{inv.ledger_name}</strong>」</span>
+                  <button onClick={() => acceptInvitation(inv)} className="px-4 py-1.5 rounded-xl bg-latte-600 text-white font-semibold">接受加入</button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* 個人暱稱與介面主題 */}
+          <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-4">
+            <h3 className="font-bold text-base">個人設定與外觀</h3>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={nicknameInput}
+                onChange={(e) => setNicknameInput(e.target.value)}
+                placeholder="設定顯示暱稱"
+                className="flex-1 p-2.5 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600"
+              />
+              <button onClick={saveNickname} className="px-4 py-2 rounded-xl bg-latte-600 text-white font-semibold">更新暱稱</button>
+            </div>
+            <div className="flex items-center justify-between pt-2">
+              <span>顯示主題模式</span>
+              <div className="flex gap-2">
+                {[['light', '淺色'], ['dark', '深色'], ['system', '跟隨系統']].map(([val, lbl]) => (
+                  <button
+                    key={val}
+                    onClick={() => setTheme(val)}
+                    className={`px-3 py-1.5 rounded-xl border ${theme === val ? 'bg-latte-600 text-white border-latte-600' : 'border-latte-300 dark:border-neutral-600'}`}
+                  >
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* 帳本管理與情侶共同帳本 */}
+          <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-4">
+            <h3 className="font-bold text-base">帳本管理與情侶共同帳本</h3>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newCoupleLedgerName}
+                onChange={(e) => setNewCoupleLedgerName(e.target.value)}
+                placeholder="輸入新的情侶共同帳本名稱..."
+                className="flex-1 p-2.5 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600"
+              />
+              <button onClick={createCoupleLedger} className="px-4 py-2 rounded-xl bg-latte-600 text-white font-semibold">建立共同帳本</button>
+            </div>
+
+            {activeLedger && (
+              <div className="p-4 rounded-xl bg-latte-50 dark:bg-neutral-700/50 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold">目前帳本：{activeLedger.name}</span>
+                  <div className="flex items-center gap-2">
+                    <span>幣別：</span>
+                    <select
+                      disabled={!isOwner}
+                      value={activeLedger.currency}
+                      onChange={(e) => changeCurrency(e.target.value)}
+                      className="p-1.5 rounded-lg border dark:bg-neutral-700 dark:border-neutral-600"
+                    >
+                      {CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                {activeLedger.type === 'couple' && (
+                  <div className="space-y-2 border-t border-latte-200 dark:border-neutral-600 pt-3">
+                    <div className="font-semibold">成員列表（{(activeLedger.memberIds || []).length} / 5 人）</div>
+                    {Object.entries(activeLedger.members || {}).map(([mUid, mInfo]) => (
+                      <div key={mUid} className="flex items-center justify-between">
+                        <span>{mInfo.nickname} ({mInfo.email}) {mInfo.role === 'owner' ? '👑 擁有者' : ''}</span>
+                        {isOwner && mUid !== user.uid && (
+                          <button onClick={() => removeMember(mUid)} className="text-xs text-rose-600 hover:underline">移除成員</button>
+                        )}
+                      </div>
+                    ))}
+                    {isOwner && (
+                      <div className="flex gap-2 pt-2">
+                        <input
+                          type="email"
+                          value={inviteEmail}
+                          onChange={(e) => setInviteEmail(e.target.value)}
+                          placeholder="輸入伴侶的 Google Email 發送邀請..."
+                          className="flex-1 p-2 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600"
+                        />
+                        <button onClick={sendInvitation} className="px-4 py-2 rounded-xl bg-latte-600 text-white font-semibold">邀請</button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="space-y-2 pt-2">
+              <div className="font-semibold text-xs text-latte-500">所有帳本（修改名稱 / 封存 / 還原 / 永久刪除）</div>
+              {ledgers.map((l) => (
+                <div key={l.id} className="flex items-center justify-between p-3 rounded-xl border border-latte-200 dark:border-neutral-700">
+                  <span>{l.name} {l.is_archived ? '（已封存）' : ''}</span>
+                  {l.owner_id === user.uid && (
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => updateLedgerName(l)}
+                        className="px-3 py-1 rounded-lg bg-latte-200 dark:bg-neutral-700 text-xs"
+                      >
+                        改名
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => toggleArchiveLedger(l, !l.is_archived)}
+                        className="px-3 py-1 rounded-lg bg-latte-200 dark:bg-neutral-700 text-xs"
+                      >
+                        {l.is_archived ? '解除封存' : '封存'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => permanentlyDeleteLedger(l)}
+                        className="px-3 py-1 rounded-lg bg-rose-600 text-white text-xs"
+                      >
+                        永久刪除
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 自訂收支分類管理 */}
+          {activeLedger && (
+          <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-4">
+            <h3 className="font-bold text-base">自訂收支分類（目前帳本）</h3>
+            <div className="flex flex-wrap gap-2">
+              <select value={catType} onChange={(e) => setCatType(e.target.value)} className="p-2 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600">
+                <option value="expense">支出</option>
+                <option value="income">收入</option>
+              </select>
+              <input type="text" placeholder="大分類名稱" value={catMajor} onChange={(e) => setCatMajor(e.target.value)} className="p-2 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600" />
+              <input type="text" placeholder="子分類名稱" value={catSub} onChange={(e) => setCatSub(e.target.value)} className="p-2 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600" />
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!catMajor.trim() || !catSub.trim()) {
+                    showToast('請輸入大分類與子分類名稱');
+                    return;
+                  }
+                  try {
+                    await firebase.firestore().collection('categories').add({
+                      ledger_id: activeLedger.id,
+                      type: catType,
+                      major: catMajor.trim(),
+                      sub: catSub.trim(),
+                      is_archived: false,
+                    });
+                    setCatSub('');
+                    showToast('已新增分類');
+                  } catch (err) {
+                    showToast('新增分類失敗：' + err.message);
+                  }
+                }}
+                className="px-4 py-2 rounded-xl bg-latte-600 text-white font-semibold"
+              >
+                新增分類
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {categories.filter((c) => !c.is_archived).map((c) => (
+                <span key={c.id} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-latte-100 dark:bg-neutral-700 text-xs">
+                  {c.type === 'expense' ? '支' : '收'}｜{c.major}/{c.sub}
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await firebase.firestore().collection('categories').doc(c.id).update({ is_archived: true });
+                        showToast('已封存該分類（歷史紀錄完整保留）');
+                      } catch (err) {
+                        showToast('封存分類失敗：' + err.message);
+                      }
+                    }}
+                    className="text-rose-600 font-bold ml-1"
+                    title="封存分類（不影響舊交易）"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          </div>
+          )}
+
+          {/* 付款方式管理 */}
+          {activeLedger && (
+          <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-4">
+            <h3 className="font-bold text-base">付款方式管理</h3>
+            <div className="flex gap-2">
+              <input type="text" placeholder="新增付款方式（如：Line Pay、悠遊卡）" value={newPmName} onChange={(e) => setNewPmName(e.target.value)} className="flex-1 p-2 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600" />
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!newPmName.trim()) {
+                    showToast('請輸入付款方式名稱');
+                    return;
+                  }
+                  try {
+                    await firebase.firestore().collection('payment_methods').add({
+                      ledger_id: activeLedger.id,
+                      name: newPmName.trim(),
+                      is_active: true,
+                    });
+                    setNewPmName('');
+                    showToast('已新增付款方式');
+                  } catch (err) {
+                    showToast('新增付款方式失敗：' + err.message);
+                  }
+                }}
+                className="px-4 py-2 rounded-xl bg-latte-600 text-white font-semibold"
+              >
+                新增
+              </button>
+            </div>
+            <div className="space-y-2">
+              {paymentMethods.map((pm) => (
+                <div key={pm.id} className="flex items-center justify-between p-2.5 rounded-xl bg-latte-50 dark:bg-neutral-700/50">
+                  <span className={!pm.is_active ? 'line-through text-neutral-400' : ''}>{pm.name}</span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const edited = await askPrompt({
+                          title: '修改付款方式名稱',
+                          defaultValue: pm.name,
+                        });
+                        if (edited && edited.trim()) {
+                          try {
+                            await firebase.firestore().collection('payment_methods').doc(pm.id).update({ name: edited.trim() });
+                            showToast('已更新付款方式名稱');
+                          } catch (err) {
+                            showToast('更新失敗：' + err.message);
+                          }
+                        }
+                      }}
+                      className="text-xs text-latte-600 hover:underline"
+                    >
+                      編輯
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await firebase.firestore().collection('payment_methods').doc(pm.id).update({ is_active: !pm.is_active });
+                          showToast(pm.is_active ? '已停用該付款方式' : '已重新啟用');
+                        } catch (err) {
+                          showToast('狀態切換失敗：' + err.message);
+                        }
+                      }}
+                      className="text-xs text-amber-700 hover:underline"
+                    >
+                      {pm.is_active ? '停用' : '啟用'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          )}
+
+          {/* 匯出 Excel/CSV 與 備份還原 */}
+          {activeLedger && (
+          <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-4">
+            <h3 className="font-bold text-base">資料匯出、備份與還原</h3>
+            <div className="flex flex-wrap items-center gap-2">
+              <span>匯出區間（留空為全部）：</span>
+              <input type="date" value={exportStart} onChange={(e) => setExportStart(e.target.value)} className="p-1.5 rounded-lg border dark:bg-neutral-700 dark:border-neutral-600" />
+              <span>至</span>
+              <input type="date" value={exportEnd} onChange={(e) => setExportEnd(e.target.value)} className="p-1.5 rounded-lg border dark:bg-neutral-700 dark:border-neutral-600" />
+              <button onClick={() => handleExport('xlsx')} className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-semibold">匯出 Excel (.xlsx)</button>
+              <button onClick={() => handleExport('csv')} className="px-4 py-2 rounded-xl bg-latte-600 text-white font-semibold">匯出 CSV (.csv)</button>
+            </div>
+
+            <div className="border-t border-latte-100 dark:border-neutral-700 pt-4 space-y-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <button onClick={handleBackupDownload} className="px-4 py-2 rounded-xl bg-latte-700 text-white font-semibold">下載完整帳本備份 (.json)</button>
+                <label className="px-4 py-2 rounded-xl border border-latte-400 cursor-pointer font-semibold">
+                  上傳備份檔案還原
+                  <input type="file" accept=".json" onChange={handleBackupFileSelect} className="hidden" />
+                </label>
+              </div>
+
+              {restorePreview && (
+                <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-900/30 border border-amber-300 space-y-2">
+                  <div className="font-bold">備份檔案預覽（來源帳本：{restorePreview.ledger_name}）</div>
+                  <div>包含交易紀錄：{restorePreview.transactions.length} 筆｜分類設定：{restorePreview.categories.length} 項｜付款方式：{restorePreview.payment_methods.length} 項</div>
+                  <div className="text-rose-600 font-medium">注意：執行還原將會覆蓋目前「{activeLedger.name}」內現有的所有資料！</div>
+                  <div className="flex gap-2 pt-1">
+                    <button onClick={executeRestore} className="px-4 py-2 rounded-xl bg-rose-600 text-white font-semibold">確認覆蓋並還原</button>
+                    <button onClick={() => setRestorePreview(null)} className="px-4 py-2 rounded-xl bg-neutral-200 dark:bg-neutral-700">取消</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          )}
+
+          <button
+            onClick={() => firebase.auth().signOut()}
+            className="md:hidden w-full py-3 rounded-xl border border-rose-300 text-rose-600 font-semibold"
+          >
+            登出帳號
+          </button>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
