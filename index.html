@@ -136,10 +136,27 @@
     ];
 
     function getTodayStr() {
+      // 使用標準 IANA 時區 Asia/Taipei 即時取得當下台灣真實日期，避免跨日或快取殘留舊日期
+      try {
+        const parts = new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'Asia/Taipei',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        }).formatToParts(new Date());
+        const y = parts.find((p) => p.type === 'year')?.value;
+        const m = parts.find((p) => p.type === 'month')?.value;
+        const d = parts.find((p) => p.type === 'day')?.value;
+        if (y && m && d) return `${y}-${m}-${d}`;
+      } catch (e) {
+        // 備援方案
+      }
       const now = new Date();
-      const offset = 8 * 60;
-      const taipei = new Date(now.getTime() + (offset + now.getTimezoneOffset()) * 60000);
-      return taipei.toISOString().split('T')[0];
+      const taipei = new Date(now.getTime() + (8 * 60 + now.getTimezoneOffset()) * 60000);
+      const yyyy = taipei.getFullYear();
+      const mm = String(taipei.getMonth() + 1).padStart(2, '0');
+      const dd = String(taipei.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
     }
 
     function getYearMonthStr(dateStr = getTodayStr()) {
@@ -303,11 +320,13 @@
       const [viewMonth, setViewMonth] = useState(() => parseInt(initialDate.slice(5, 7), 10) || (new Date().getMonth() + 1));
 
       function shiftDays(offset) {
-        const d = new Date(todayStr + 'T00:00:00');
-        d.setDate(d.getDate() + offset);
-        const yyyy = d.getFullYear();
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const dd = String(d.getDate()).padStart(2, '0');
+        // 每次點擊「前天／昨天／今天」都重新抓取當下真實的今天日期
+        const currentToday = getTodayStr();
+        const [y, m, day] = currentToday.split('-').map(Number);
+        const d = new Date(Date.UTC(y, m - 1, day + offset));
+        const yyyy = d.getUTCFullYear();
+        const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+        const dd = String(d.getUTCDate()).padStart(2, '0');
         onChange(`${yyyy}-${mm}-${dd}`);
         onClose();
       }
@@ -435,9 +454,15 @@
     function TransactionModal({ user, profile, activeLedger, currencySymbol = 'NT$', categories, paymentMethods, editingTx, showToast, onClose }) {
       const [type, setType] = useState(editingTx?.type || 'expense');
       const [amountStr, setAmountStr] = useState(editingTx?.amount ? String(editingTx.amount) : '0');
-      const [date, setDate] = useState(editingTx?.date || getTodayStr());
+      const [date, setDate] = useState(() => editingTx?.date || getTodayStr());
       const [itemName, setItemName] = useState(editingTx?.item_name || '');
       const [note, setNote] = useState(editingTx?.note || '');
+
+      useEffect(() => {
+        if (!editingTx) {
+          setDate(getTodayStr());
+        }
+      }, [editingTx]);
 
       const safeCategories = useMemo(() => {
         const list = Array.isArray(categories) ? categories.filter((c) => !c.is_archived) : [];
@@ -2849,8 +2874,27 @@
       const [budgetDoc, setBudgetDoc] = useState(null);
 
       const [activeTab, setActiveTab] = useState('home');
-      const [selectedMonth, setSelectedMonth] = useState(getYearMonthStr());
+      const [selectedMonth, setSelectedMonth] = useState(() => getYearMonthStr());
       const [customDateRange, setCustomDateRange] = useState({ enabled: false, start: '', end: '' });
+
+      // 當 PWA App 從背景切換回前景或跨過午夜 00:00 時，自動偵測並更新為最新月份
+      useEffect(() => {
+        let lastTrackedDay = getTodayStr();
+        const syncDateIfRolledOver = () => {
+          const currentDay = getTodayStr();
+          if (currentDay !== lastTrackedDay) {
+            const prevMonth = lastTrackedDay.slice(0, 7);
+            lastTrackedDay = currentDay;
+            setSelectedMonth((prev) => (prev === prevMonth ? currentDay.slice(0, 7) : prev));
+          }
+        };
+        const timer = setInterval(syncDateIfRolledOver, 60000);
+        document.addEventListener('visibilitychange', syncDateIfRolledOver);
+        return () => {
+          clearInterval(timer);
+          document.removeEventListener('visibilitychange', syncDateIfRolledOver);
+        };
+      }, []);
 
       const [txModalOpen, setTxModalOpen] = useState(false);
       const [editingTx, setEditingTx] = useState(null);
