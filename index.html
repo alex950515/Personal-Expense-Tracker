@@ -917,6 +917,7 @@
               user={user}
               profile={profile}
               activeLedger={activeLedger}
+              currencySymbol={currencySymbol}
               categories={categories}
               paymentMethods={paymentMethods}
               editingTx={editingTx}
@@ -1150,7 +1151,7 @@
       );
     }
 
-    function TransactionModal({ user, profile, activeLedger, categories, paymentMethods, editingTx, showToast, onClose }) {
+    function TransactionModal({ user, profile, activeLedger, currencySymbol = 'NT$', categories, paymentMethods, editingTx, showToast, onClose }) {
       const [type, setType] = useState(editingTx?.type || 'expense');
       const [amountStr, setAmountStr] = useState(editingTx ? String(editingTx.amount) : '0');
       const [date, setDate] = useState(editingTx?.date || getTodayStr());
@@ -1557,6 +1558,124 @@
                   <button type="button" onClick={() => setPmModalOpen(false)} className="px-4 py-2 rounded-xl bg-latte-100 dark:bg-neutral-700 text-xs font-medium">關閉</button>
                 </div>
               </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function StatsView({ activeLedger, currencySymbol = 'NT$', selectedMonth, setSelectedMonth, transactions }) {
+      const [statType, setStatType] = useState('expense');
+
+      const filteredTx = useMemo(() => {
+        return transactions.filter((t) => t.type === statType);
+      }, [transactions, statType]);
+
+      const totalAmount = useMemo(() => {
+        return filteredTx.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+      }, [filteredTx]);
+
+      const byMajor = useMemo(() => {
+        const map = {};
+        filteredTx.forEach((t) => {
+          map[t.major_category] = (map[t.major_category] || 0) + (Number(t.amount) || 0);
+        });
+        return Object.entries(map)
+          .map(([name, amount]) => ({
+            name,
+            amount,
+            pct: totalAmount > 0 ? Math.round((amount / totalAmount) * 100) : 0,
+          }))
+          .sort((a, b) => b.amount - a.amount);
+      }, [filteredTx, totalAmount]);
+
+      const byMember = useMemo(() => {
+        if (activeLedger?.type !== 'couple') return [];
+        const map = {};
+        filteredTx.forEach((t) => {
+          const nick = t.payer_nickname || '成員';
+          map[nick] = (map[nick] || 0) + (Number(t.amount) || 0);
+        });
+        return Object.entries(map)
+          .map(([nickname, amount]) => ({
+            nickname,
+            amount,
+            pct: totalAmount > 0 ? Math.round((amount / totalAmount) * 100) : 0,
+          }))
+          .sort((a, b) => b.amount - a.amount);
+      }, [filteredTx, totalAmount, activeLedger]);
+
+      return (
+        <div className="space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-2.5">
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="px-3 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-latte-200 dark:border-neutral-700 text-xs sm:text-sm font-semibold shadow-2xs"
+            />
+            <div className="flex bg-white dark:bg-neutral-800 p-1 rounded-xl border border-latte-200 dark:border-neutral-700">
+              <button
+                type="button"
+                onClick={() => setStatType('expense')}
+                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition ${statType === 'expense' ? 'bg-rose-600 text-white' : 'text-latte-700 dark:text-neutral-300'}`}
+              >
+                支出分析
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatType('income')}
+                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition ${statType === 'income' ? 'bg-emerald-600 text-white' : 'text-latte-700 dark:text-neutral-300'}`}
+              >
+                收入分析
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-4">
+            <div className="flex items-center justify-between border-b border-latte-100 dark:border-neutral-700 pb-3">
+              <span className="font-bold text-sm sm:text-base">{statType === 'expense' ? '本月總支出' : '本月總收入'}</span>
+              <span className={`font-extrabold text-lg ${statType === 'expense' ? 'text-rose-600' : 'text-emerald-600'}`}>
+                {currencySymbol}{totalAmount.toLocaleString()}
+              </span>
+            </div>
+
+            {byMajor.length === 0 ? (
+              <div className="py-6 text-center text-xs text-latte-500">本月尚無{statType === 'expense' ? '支出' : '收入'}統計資料</div>
+            ) : (
+              <div className="space-y-3">
+                {byMajor.map((item) => (
+                  <div key={item.name} className="space-y-1.5 text-xs sm:text-sm">
+                    <div className="flex justify-between font-semibold">
+                      <span>{item.name} ({item.pct}%)</span>
+                      <span>{currencySymbol}{item.amount.toLocaleString()}</span>
+                    </div>
+                    <div className="w-full h-2.5 rounded-full bg-latte-100 dark:bg-neutral-700 overflow-hidden">
+                      <div
+                        className={`h-full ${statType === 'expense' ? 'bg-rose-500' : 'bg-emerald-500'}`}
+                        style={{ width: `${item.pct}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {activeLedger?.type === 'couple' && byMember.length > 0 && (
+            <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-3">
+              <h3 className="font-bold text-sm sm:text-base">共同帳本成員{statType === 'expense' ? '付款' : '入帳'}佔比</h3>
+              {byMember.map((m) => (
+                <div key={m.nickname} className="space-y-1.5 text-xs sm:text-sm">
+                  <div className="flex justify-between font-semibold">
+                    <span>{m.nickname} ({m.pct}%)</span>
+                    <span>{currencySymbol}{m.amount.toLocaleString()}</span>
+                  </div>
+                  <div className="w-full h-2.5 rounded-full bg-latte-100 dark:bg-neutral-700 overflow-hidden">
+                    <div className="h-full bg-latte-600" style={{ width: `${m.pct}%` }}></div>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
