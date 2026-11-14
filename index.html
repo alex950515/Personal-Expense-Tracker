@@ -39,9 +39,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC", sans-serif; }
-    /* Hide scrollbar for Chrome, Safari and Opera */
     .no-scrollbar::-webkit-scrollbar { display: none; }
-    /* Hide scrollbar for IE, Edge and Firefox */
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
   </style>
 </head>
@@ -783,21 +781,22 @@
             )}
           </main>
 
-            {/* 手機版底部導覽列 */}
-            <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md border-t border-latte-200/80 dark:border-neutral-800 grid grid-cols-5 py-2 px-1 text-xs items-center shadow-lg">
+          {/* 手機版底部導覽列（加高兩倍，大幅提升觸控便利性） */}
+          <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md border-t border-latte-200/80 dark:border-neutral-800 grid grid-cols-5 py-3 px-2 text-xs items-center shadow-lg min-h-[72px]">
             <button
               onClick={() => setActiveTab('home')}
-              className={`flex flex-col items-center justify-center py-1 font-medium transition ${activeTab === 'home' ? 'text-latte-700 dark:text-latte-200 font-bold' : 'text-neutral-400 dark:text-neutral-500'}`}
+              className={`flex flex-col items-center justify-center py-3 font-medium transition ${activeTab === 'home' ? 'text-latte-700 dark:text-latte-200 font-bold' : 'text-neutral-400 dark:text-neutral-500'}`}
             >
-              <span className="text-xs sm:text-sm">首頁</span>
+              <span className="text-sm sm:text-base">首頁</span>
             </button>
             <button
               onClick={() => setActiveTab('stats')}
-              className={`flex flex-col items-center justify-center py-1 font-medium transition ${activeTab === 'stats' ? 'text-latte-700 dark:text-latte-200 font-bold' : 'text-neutral-400 dark:text-neutral-500'}`}
+              className={`flex flex-col items-center justify-center py-3 font-medium transition ${activeTab === 'stats' ? 'text-latte-700 dark:text-latte-200 font-bold' : 'text-neutral-400 dark:text-neutral-500'}`}
             >
-              <span className="text-xs sm:text-sm">統計</span>
+              <span className="text-sm sm:text-base">統計</span>
             </button>
             
+            {/* 手機版置中特大顯眼的「+ 記帳」按鈕（加高放大兩倍） */}
             <div className="flex justify-center">
               <button
                 type="button"
@@ -809,7 +808,7 @@
                   setEditingTx(null);
                   setTxModalOpen(true);
                 }}
-                className="px-5 py-3 rounded-full bg-latte-600 hover:bg-latte-700 active:bg-latte-800 text-white font-bold text-sm shadow-xl flex items-center justify-center whitespace-nowrap -mt-5 border-3 border-latte-50 dark:border-neutral-900 transition transform active:scale-95"
+                className="px-6 py-4 rounded-full bg-latte-600 hover:bg-latte-700 active:bg-latte-800 text-white font-extrabold text-base sm:text-lg shadow-xl flex items-center justify-center whitespace-nowrap -mt-8 border-4 border-latte-50 dark:border-neutral-900 transition transform active:scale-95"
                 title="記帳"
               >
                 + 記帳
@@ -818,17 +817,17 @@
 
             <button
               onClick={() => setActiveTab('budgets')}
-              className={`flex flex-col items-center justify-center py-1 font-medium transition ${activeTab === 'budgets' ? 'text-latte-700 dark:text-latte-200 font-bold' : 'text-neutral-400 dark:text-neutral-500'}`}
+              className={`flex flex-col items-center justify-center py-3 font-medium transition ${activeTab === 'budgets' ? 'text-latte-700 dark:text-latte-200 font-bold' : 'text-neutral-400 dark:text-neutral-500'}`}
             >
-              <span className="text-xs sm:text-sm">預算</span>
+              <span className="text-sm sm:text-base">預算</span>
             </button>
             <button
               onClick={() => setActiveTab('settings')}
-              className={`flex flex-col items-center justify-center py-1 font-medium relative transition ${activeTab === 'settings' ? 'text-latte-700 dark:text-latte-200 font-bold' : 'text-neutral-400 dark:text-neutral-500'}`}
+              className={`flex flex-col items-center justify-center py-3 font-medium relative transition ${activeTab === 'settings' ? 'text-latte-700 dark:text-latte-200 font-bold' : 'text-neutral-400 dark:text-neutral-500'}`}
             >
-              <span className="text-xs sm:text-sm">設定</span>
+              <span className="text-sm sm:text-base">設定</span>
               {invitations.length > 0 && (
-                <span className="absolute top-0 right-3 w-2 h-2 rounded-full bg-red-500"></span>
+                <span className="absolute top-1 right-4 w-2.5 h-2.5 rounded-full bg-red-500"></span>
               )}
             </button>
           </nav>
@@ -1228,8 +1227,8 @@
               <button type="button" onClick={onClose} className="p-1.5 rounded-full text-neutral-400 hover:bg-latte-100 dark:hover:bg-neutral-800 shrink-0">✕</button>
             </div>
 
-            {/* 固定為兩行高度的分類選擇區塊，支援橫向滾輪滑動查看更多分類 */}
-            <div className="bg-latte-50 dark:bg-neutral-800/50 p-3 rounded-2xl space-y-2">
+            {/* 類別選擇區塊：上下固定兩行檢視高度，垂直滾動查看更多分類 */}
+            <div className="bg-latte-50 dark:bg-neutral-800/50 p-3 rounded-2xl space-y-2.5">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-latte-600 dark:text-neutral-400">選擇記帳分類</span>
                 {selectedSubCat && (
@@ -1239,14 +1238,14 @@
                 )}
               </div>
 
-              {/* 第一行：大分類滾動列 */}
-              <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar shrink-0">
+              {/* 大分類列表：固定約兩行高度並支援上下滾動 */}
+              <div className="max-h-[82px] overflow-y-auto no-scrollbar flex flex-wrap gap-1.5 p-1 bg-white/50 dark:bg-neutral-900/40 rounded-xl border border-latte-200/60 dark:border-neutral-700/60">
                 {majors.map((m) => (
                   <button
                     key={m}
                     type="button"
                     onClick={() => setSelectedMajor(m)}
-                    className={`px-3 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition ${
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
                       selectedMajor === m
                         ? 'bg-latte-800 text-white shadow-2xs dark:bg-neutral-100 dark:text-neutral-900'
                         : 'bg-white dark:bg-neutral-700 text-latte-700 dark:text-neutral-300 border border-latte-200 dark:border-neutral-600'
@@ -1257,8 +1256,8 @@
                 ))}
               </div>
 
-              {/* 第二行：子分類滾動網格（固定兩行檢視高度，橫向滾輪滑動） */}
-              <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+              {/* 子分類網格：固定約兩行高度並支援上下滾動查看 */}
+              <div className="max-h-[110px] overflow-y-auto no-scrollbar grid grid-cols-3 gap-1.5 p-1 bg-white/50 dark:bg-neutral-900/40 rounded-xl border border-latte-200/60 dark:border-neutral-700/60">
                 {currentMajorSubs.map((c) => {
                   const isSelected = selectedSubCat?.major === c.major && selectedSubCat?.sub === c.sub;
                   return (
@@ -1266,149 +1265,296 @@
                       key={c.id || c.sub}
                       type="button"
                       onClick={() => setSelectedSubCat({ major: c.major, sub: c.sub, emoji: c.emoji || '📝' })}
-                      className={`flex flex-col items-center justify-center p-2 rounded-xl border transition min-w-[70px] shrink-0 ${
+                      className={`flex items-center gap-2 p-2 rounded-xl border transition text-left ${
                         isSelected
                           ? 'border-latte-600 bg-white dark:bg-neutral-700 ring-2 ring-latte-600/30 font-bold'
-                          : 'border-latte-200 dark:border-neutral-700 bg-white/70 dark:bg-neutral-800 hover:bg-white'
+                          : 'border-latte-200 dark:border-neutral-700 bg-white/80 dark:bg-neutral-800 hover:bg-white'
                       }`}
                     >
-                      <span className="text-lg mb-0.5">{c.emoji || '📝'}</span>
-                      <span className="text-[10px] text-latte-800 dark:text-neutral-200 truncate w-full text-center">{c.sub}</span>
+                      <span className="text-base shrink-0">{c.emoji || '📝'}</span>
+                      <span className="text-xs text-latte-800 dark:text-neutral-200 truncate">{c.sub}</span>
                     </button>
                   );
                 })}
               </div>
             </div>
 
-            <div>
+            {/* 項目名稱與備註 */}
+            <div className="grid grid-cols-2 gap-2">
               <input
                 type="text"
                 value={itemName}
                 onChange={(e) => setItemName(e.target.value)}
-                placeholder="點選添加備註/項目名稱 📝"
-                className="w-full px-4 py-2.5 rounded-xl bg-latte-50 dark:bg-neutral-800 border border-latte-200 dark:border-neutral-700 text-xs sm:text-sm text-latte-800 dark:text-neutral-200 focus:outline-none placeholder:text-latte-400 font-medium"
+                placeholder="項目名稱 (選填)"
+                className="p-2.5 rounded-xl border border-latte-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-xs"
+              />
+              <input
+                type="text"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="備註 (選填)"
+                className="p-2.5 rounded-xl border border-latte-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-xs"
               />
             </div>
 
-            <div className="flex items-center justify-between bg-latte-100 dark:bg-neutral-800 px-4 py-3 rounded-2xl gap-3">
-              <div className="text-xl sm:text-2xl font-bold text-latte-900 dark:text-white tracking-tight text-left truncate">
-                NT$ {amountStr}
+            {/* 金額顯示與支出/收入按鈕並排 */}
+            <div className="bg-latte-100/70 dark:bg-neutral-800 p-3.5 rounded-2xl flex items-center justify-between border border-latte-200 dark:border-neutral-700">
+              <div className="min-w-0">
+                <span className="text-[11px] text-latte-500 block">輸入金額</span>
+                <div className="text-2xl sm:text-3xl font-extrabold text-latte-900 dark:text-white truncate tracking-tight">
+                  {currencySymbol} {amountStr}
+                </div>
               </div>
-              <div className="flex gap-1.5 shrink-0">
+              <div className="flex bg-white dark:bg-neutral-700 p-1 rounded-xl border border-latte-200 dark:border-neutral-600 shrink-0">
                 <button
                   type="button"
                   onClick={() => setType('expense')}
-                  className={`px-3.5 py-2 rounded-xl font-bold text-xs sm:text-sm transition shadow-xs ${
-                    type === 'expense'
-                      ? 'bg-rose-600 text-white ring-2 ring-rose-600/30'
-                      : 'bg-white dark:bg-neutral-700 text-latte-700 dark:text-neutral-300'
-                  }`}
+                  className={`px-3.5 py-1.5 rounded-lg font-bold text-xs transition ${type === 'expense' ? 'bg-rose-600 text-white shadow-xs' : 'text-latte-700 dark:text-neutral-300'}`}
                 >
                   支出
                 </button>
                 <button
                   type="button"
                   onClick={() => setType('income')}
-                  className={`px-3.5 py-2 rounded-xl font-bold text-xs sm:text-sm transition shadow-xs ${
-                    type === 'income'
-                      ? 'bg-emerald-600 text-white ring-2 ring-emerald-600/30'
-                      : 'bg-white dark:bg-neutral-700 text-latte-700 dark:text-neutral-300'
-                  }`}
+                  className={`px-3.5 py-1.5 rounded-lg font-bold text-xs transition ${type === 'income' ? 'bg-emerald-600 text-white shadow-xs' : 'text-latte-700 dark:text-neutral-300'}`}
                 >
                   收入
                 </button>
               </div>
             </div>
 
-            <div className="space-y-3">
-              <div className="grid grid-cols-4 gap-2">
-                <button type="button" onClick={() => handleKeyPress('1')} className="py-3 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-100 font-bold text-base shadow-2xs">1</button>
-                <button type="button" onClick={() => handleKeyPress('2')} className="py-3 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-100 font-bold text-base shadow-2xs">2</button>
-                <button type="button" onClick={() => handleKeyPress('3')} className="py-3 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-100 font-bold text-base shadow-2xs">3</button>
-                <button type="button" onClick={() => handleKeyPress('backspace')} className="py-3 rounded-xl bg-latte-200 dark:bg-neutral-700 hover:bg-latte-300 font-bold text-xs text-latte-700 dark:text-neutral-200 flex items-center justify-center">⌫</button>
-
-                <button type="button" onClick={() => handleKeyPress('4')} className="py-3 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-100 font-bold text-base shadow-2xs">4</button>
-                <button type="button" onClick={() => handleKeyPress('5')} className="py-3 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-100 font-bold text-base shadow-2xs">5</button>
-                <button type="button" onClick={() => handleKeyPress('6')} className="py-3 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-100 font-bold text-base shadow-2xs">6</button>
-                <button
-                  type="button"
-                  onClick={() => setPmModalOpen(true)}
-                  className="py-2 px-1 rounded-xl bg-latte-600 hover:bg-latte-700 text-white font-bold text-xs flex flex-col items-center justify-center shadow-sm"
-                >
-                  <span className="text-[10px] opacity-80">付款方式</span>
-                  <span className="truncate w-full">{paymentMethod || '現金'}</span>
-                </button>
-
-                <button type="button" onClick={() => handleKeyPress('7')} className="py-3 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-100 font-bold text-base shadow-2xs">7</button>
-                <button type="button" onClick={() => handleKeyPress('8')} className="py-3 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-100 font-bold text-base shadow-2xs">8</button>
-                <button type="button" onClick={() => handleKeyPress('9')} className="py-3 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-100 font-bold text-base shadow-2xs">9</button>
-                <button
-                  type="button"
-                  onClick={() => setDateModalOpen(true)}
-                  className="py-2 px-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex flex-col items-center justify-center shadow-sm"
-                >
-                  <span className="text-[10px] opacity-90">日期</span>
-                  <span className="truncate w-full">{date === getTodayStr() ? '今日' : date.slice(5)}</span>
-                </button>
-
-                <button type="button" onClick={() => handleKeyPress('.')} className="py-3 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-100 font-bold text-base shadow-2xs">.</button>
-                <button type="button" onClick={() => handleKeyPress('0')} className="py-3 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-100 font-bold text-base shadow-2xs">0</button>
-                <button type="button" onClick={() => handleKeyPress('00')} className="py-3 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-100 font-bold text-base shadow-2xs">00</button>
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={handleSubmit}
-                  className="py-3 rounded-xl bg-latte-800 hover:bg-latte-900 active:scale-95 text-white font-bold text-xs shadow-md flex items-center justify-center transition"
-                >
-                  {saving ? '儲存...' : '確定'}
-                </button>
-              </div>
-            </div>
-
-            {pmModalOpen && (
-              <div className="fixed inset-0 z-60 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-                <div className="bg-white dark:bg-neutral-800 rounded-2xl max-w-xs w-full p-5 shadow-xl border border-latte-200 dark:border-neutral-700 space-y-3">
-                  <h4 className="font-bold text-sm text-latte-900 dark:text-white">選擇付款方式</h4>
-                  <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                    {activePms.map((p) => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => { setPaymentMethod(p.name); setPmModalOpen(false); }}
-                        className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-semibold transition ${paymentMethod === p.name ? 'bg-latte-600 text-white' : 'bg-latte-50 dark:bg-neutral-700 text-latte-800 dark:text-neutral-200'}`}
-                      >
-                        {p.name}
-                      </button>
-                    ))}
-                  </div>
-                  <button type="button" onClick={() => setPmModalOpen(false)} className="w-full py-2 rounded-xl bg-latte-100 dark:bg-neutral-700 text-xs font-medium">關閉</button>
-                </div>
-              </div>
-            )}
-
-            {dateModalOpen && (
-              <div className="fixed inset-0 z-60 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-                <div className="bg-white dark:bg-neutral-800 rounded-2xl max-w-xs w-full p-5 shadow-xl border border-latte-200 dark:border-neutral-700 space-y-3">
-                  <h4 className="font-bold text-sm text-latte-900 dark:text-white">選擇交易日期</h4>
-                  <div className="flex gap-2">
+            {/* 4x4 計算機鍵盤與右側操作按鈕 */}
+            <div className="grid grid-cols-4 gap-1.5">
+              {[
+                ['1', '2', '3'],
+                ['4', '5', '6'],
+                ['7', '8', '9'],
+                ['.', '0', '00']
+              ].map((row, rIdx) => (
+                <React.Fragment key={rIdx}>
+                  {row.map((btn) => (
+                    <button
+                      key={btn}
+                      type="button"
+                      onClick={() => handleKeyPress(btn)}
+                      className="py-3 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-200 dark:hover:bg-neutral-700 text-latte-900 dark:text-white font-bold text-base shadow-2xs border border-latte-200/80 dark:border-neutral-700 transition active:scale-95"
+                    >
+                      {btn}
+                    </button>
+                  ))}
+                  {rIdx === 0 && (
                     <button
                       type="button"
-                      onClick={() => { setDate(getTodayStr()); setDateModalOpen(false); }}
-                      className="flex-1 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold"
+                      onClick={() => handleKeyPress('AC')}
+                      className="py-3 rounded-xl bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 font-bold text-xs border border-amber-200 dark:border-amber-800 shadow-2xs transition active:scale-95"
                     >
-                      設為今日
+                      AC
                     </button>
-                  </div>
-                  <input
-                    type="date"
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    className="w-full p-2.5 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600 text-xs font-semibold text-center"
-                  />
-                  <button type="button" onClick={() => setDateModalOpen(false)} className="w-full py-2 rounded-xl bg-latte-100 dark:bg-neutral-700 text-xs font-medium">確定</button>
+                  )}
+                  {rIdx === 1 && (
+                    <button
+                      type="button"
+                      onClick={() => handleKeyPress('+')}
+                      className="py-3 rounded-xl bg-latte-100 dark:bg-neutral-700 text-latte-800 dark:text-neutral-200 font-bold text-sm border border-latte-200 dark:border-neutral-600 shadow-2xs transition active:scale-95"
+                    >
+                      + / -
+                    </button>
+                  )}
+                  {rIdx === 2 && (
+                    <button
+                      type="button"
+                      onClick={() => setDateModalOpen(true)}
+                      className="py-3 px-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-2xs transition active:scale-95 flex flex-col items-center justify-center leading-tight"
+                    >
+                      <span>日期</span>
+                      <span className="text-[10px] font-normal opacity-90 truncate max-w-full">{date}</span>
+                    </button>
+                  )}
+                  {rIdx === 3 && (
+                    <button
+                      type="button"
+                      onClick={() => handleSubmit()}
+                      disabled={saving}
+                      className="py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-md transition active:scale-95"
+                    >
+                      {saving ? '儲存' : '確定'}
+                    </button>
+                  )}
+                </React.Fragment>
+              ))}
+
+              {/* 鍵盤右上：付款方式 */}
+              <button
+                type="button"
+                onClick={() => setPmModalOpen(true)}
+                className="col-start-4 row-start-1 py-3 px-1 rounded-xl bg-latte-200/80 dark:bg-neutral-700 text-latte-800 dark:text-neutral-100 font-bold text-xs shadow-2xs transition active:scale-95 flex flex-col items-center justify-center leading-tight border border-latte-300 dark:border-neutral-600"
+              >
+                <span>付款方式</span>
+                <span className="text-[10px] font-normal truncate max-w-full">{paymentMethod || '現金'}</span>
+              </button>
+
+              {/* 鍵盤右二：退格鍵 */}
+              <button
+                type="button"
+                onClick={() => handleKeyPress('backspace')}
+                className="col-start-4 row-start-2 py-3 rounded-xl bg-latte-100 dark:bg-neutral-800 text-latte-800 dark:text-neutral-200 font-bold text-base shadow-2xs border border-latte-200 dark:border-neutral-700 transition active:scale-95"
+              >
+                ⌫
+              </button>
+            </div>
+          </div>
+
+          {/* 日期選擇彈跳窗 */}
+          {dateModalOpen && (
+            <div className="fixed inset-0 z-60 bg-black/50 flex items-center justify-center p-4">
+              <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 max-w-xs w-full space-y-4 shadow-xl border border-latte-200 dark:border-neutral-700">
+                <h3 className="font-bold text-base text-latte-900 dark:text-white">選擇記帳日期</h3>
+                <input
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-latte-300 dark:border-neutral-600 dark:bg-neutral-700 text-sm font-semibold"
+                />
+                <div className="flex justify-end gap-2">
+                  <button type="button" onClick={() => setDate(getTodayStr())} className="px-3 py-1.5 rounded-xl bg-latte-100 dark:bg-neutral-700 text-xs font-medium mr-auto">設為今日</button>
+                  <button type="button" onClick={() => setDateModalOpen(false)} className="px-4 py-2 rounded-xl bg-latte-600 text-white text-xs font-semibold">確認</button>
                 </div>
               </div>
-            )}
+            </div>
+          )}
+
+          {/* 付款方式選擇彈跳窗 */}
+          {pmModalOpen && (
+            <div className="fixed inset-0 z-60 bg-black/50 flex items-center justify-center p-4">
+              <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 max-w-xs w-full space-y-3 shadow-xl border border-latte-200 dark:border-neutral-700">
+                <h3 className="font-bold text-base text-latte-900 dark:text-white">選擇付款方式</h3>
+                <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                  {activePms.map((pm) => (
+                    <button
+                      key={pm.id || pm.name}
+                      type="button"
+                      onClick={() => { setPaymentMethod(pm.name); setPmModalOpen(false); }}
+                      className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-semibold transition ${paymentMethod === pm.name ? 'bg-latte-600 text-white' : 'bg-latte-50 dark:bg-neutral-700 text-latte-800 dark:text-neutral-200'}`}
+                    >
+                      {pm.name}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex justify-end pt-2">
+                  <button type="button" onClick={() => setPmModalOpen(false)} className="px-4 py-2 rounded-xl bg-latte-100 dark:bg-neutral-700 text-xs font-medium">關閉</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function StatsView({ activeLedger, currencySymbol, selectedMonth, setSelectedMonth, transactions }) {
+      const stats = useMemo(() => {
+        let incomeTotal = 0;
+        let expenseTotal = 0;
+        const expenseTree = {};
+        const incomeTree = {};
+        const memberPaid = {};
+
+        transactions.forEach((tx) => {
+          const amt = Number(tx.amount) || 0;
+          if (tx.type === 'income') {
+            incomeTotal += amt;
+            if (!incomeTree[tx.major_category]) incomeTree[tx.major_category] = { total: 0, subs: {} };
+            incomeTree[tx.major_category].total += amt;
+            incomeTree[tx.major_category].subs[tx.sub_category] = (incomeTree[tx.major_category].subs[tx.sub_category] || 0) + amt;
+          } else {
+            expenseTotal += amt;
+            if (!expenseTree[tx.major_category]) expenseTree[tx.major_category] = { total: 0, subs: {} };
+            expenseTree[tx.major_category].total += amt;
+            expenseTree[tx.major_category].subs[tx.sub_category] = (expenseTree[tx.major_category].subs[tx.sub_category] || 0) + amt;
+
+            if (activeLedger?.type === 'couple') {
+              const name = tx.payer_nickname || '成員';
+              memberPaid[name] = (memberPaid[name] || 0) + amt;
+            }
+          }
+        });
+
+        return { incomeTotal, expenseTotal, balance: incomeTotal - expenseTotal, expenseTree, incomeTree, memberPaid };
+      }, [transactions, activeLedger]);
+
+      return (
+        <div className="space-y-6">
+          <div className="flex items-center gap-2">
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="px-3 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-latte-300 dark:border-neutral-600 text-sm font-semibold"
+            />
+          </div>
+
+          <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-2 text-sm">
+            <div className="flex justify-between"><span>本月收入總額：</span><span className="font-bold text-emerald-600">+{currencySymbol}{stats.incomeTotal.toLocaleString()}</span></div>
+            <div className="flex justify-between"><span>本月支出總額：</span><span className="font-bold text-rose-600">-{currencySymbol}{stats.expenseTotal.toLocaleString()}</span></div>
+            <div className="flex justify-between border-t border-latte-100 dark:border-neutral-700 pt-2">
+              <span>本月結餘：</span>
+              <span className="font-bold">{stats.balance >= 0 ? `+${currencySymbol}${stats.balance.toLocaleString()}` : `-${currencySymbol}${Math.abs(stats.balance).toLocaleString()}`}</span>
+            </div>
+          </div>
+
+          {activeLedger?.type === 'couple' && (
+            <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-2 text-sm">
+              <h3 className="font-bold text-base mb-2">共同帳本成員實際付款統計</h3>
+              <div className="flex justify-between font-semibold">
+                <span>共同支出總額：</span>
+                <span>{currencySymbol}{stats.expenseTotal.toLocaleString()}</span>
+              </div>
+              {Object.entries(stats.memberPaid).map(([name, amt]) => (
+                <div key={name} className="flex justify-between pl-3 text-latte-700 dark:text-neutral-300">
+                  <span>- {name}：</span>
+                  <span>{currencySymbol}{amt.toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-3 text-sm">
+              <h3 className="font-bold text-base text-rose-600">支出分類統計</h3>
+              {Object.keys(stats.expenseTree).length === 0 && <div className="text-latte-500">本月無支出紀錄</div>}
+              {Object.entries(stats.expenseTree).map(([major, data]) => (
+                <div key={major} className="space-y-1">
+                  <div className="font-bold flex justify-between">
+                    <span>{major}：</span>
+                    <span>{currencySymbol}{data.total.toLocaleString()}</span>
+                  </div>
+                  {Object.entries(data.subs).map(([sub, subAmt]) => (
+                    <div key={sub} className="flex justify-between pl-4 text-latte-600 dark:text-neutral-400">
+                      <span>- {sub}：</span>
+                      <span>{currencySymbol}{subAmt.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+
+            <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-3 text-sm">
+              <h3 className="font-bold text-base text-emerald-600">收入分類統計</h3>
+              {Object.keys(stats.incomeTree).length === 0 && <div className="text-latte-500">本月無收入紀錄</div>}
+              {Object.entries(stats.incomeTree).map(([major, data]) => (
+                <div key={major} className="space-y-1">
+                  <div className="font-bold flex justify-between">
+                    <span>{major}：</span>
+                    <span>{currencySymbol}{data.total.toLocaleString()}</span>
+                  </div>
+                  {Object.entries(data.subs).map(([sub, subAmt]) => (
+                    <div key={sub} className="flex justify-between pl-4 text-latte-600 dark:text-neutral-400">
+                      <span>- {sub}：</span>
+                      <span>{currencySymbol}{subAmt.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       );
@@ -1835,7 +1981,7 @@
           await firebase.firestore().collection('categories').add({
             ledger_id: activeLedger.id,
             type: catType,
-            emoji: catEmoji.trim() || '📝',
+            emoji: catEmoji || '📝',
             major: catMajor.trim(),
             sub: catSub.trim(),
             is_archived: false,
@@ -1850,16 +1996,16 @@
       async function deleteCategory(cat) {
         const ok = await askConfirm({
           title: '刪除分類',
-          message: `確定要永久刪除「${cat.major} / ${cat.sub}」分類嗎？`,
+          message: `確定要刪除分類「${cat.emoji || ''} ${cat.major} / ${cat.sub}」嗎？`,
           danger: true,
           confirmText: '確認刪除',
         });
         if (!ok) return;
         try {
           await firebase.firestore().collection('categories').doc(cat.id).delete();
-          showToast('已刪除該分類');
+          showToast('已刪除分類');
         } catch (err) {
-          showToast('刪除分類失敗：' + err.message);
+          showToast('刪除失敗：' + err.message);
         }
       }
 
@@ -2023,8 +2169,9 @@
             </div>
           </div>
 
+          {/* 自訂收支分類與 emoji 管理 */}
           <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-4">
-            <h3 className="font-bold text-base">自訂收支分類與 Emoji 圖示（目前帳本）</h3>
+            <h3 className="font-bold text-base">自訂收支分類與 Emoji（目前帳本）</h3>
             <form onSubmit={addCategory} className="flex flex-wrap gap-2">
               <select
                 value={catType}
@@ -2036,32 +2183,33 @@
               </select>
               <input
                 type="text"
-                placeholder="Emoji (例: 🍔)"
+                placeholder="Emoji"
                 value={catEmoji}
                 onChange={(e) => setCatEmoji(e.target.value)}
-                className="w-18 p-2.5 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600 text-center text-xs"
+                className="w-16 p-2.5 text-center rounded-xl border dark:bg-neutral-700 dark:border-neutral-600 text-xs"
               />
               <input
                 type="text"
                 placeholder="大分類名稱"
                 value={catMajor}
                 onChange={(e) => setCatMajor(e.target.value)}
-                className="flex-1 min-w-[90px] p-2.5 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600 text-xs"
+                className="flex-1 min-w-[100px] p-2.5 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600 text-xs"
               />
               <input
                 type="text"
                 placeholder="子分類名稱"
                 value={catSub}
                 onChange={(e) => setCatSub(e.target.value)}
-                className="flex-1 min-w-[90px] p-2.5 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600 text-xs"
+                className="flex-1 min-w-[100px] p-2.5 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600 text-xs"
               />
               <button type="submit" className="px-4 py-2.5 rounded-xl bg-latte-600 text-white font-semibold text-xs">新增分類</button>
             </form>
             <div className="flex flex-wrap gap-2 pt-2">
               {categories.map((c) => (
                 <div key={c.id} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs border bg-latte-50 dark:bg-neutral-700/50">
-                  <span>{c.emoji || '📝'} {c.type === 'income' ? '收' : '支'} | {c.major} / {c.sub}</span>
-                  <button type="button" onClick={() => deleteCategory(c)} className="text-rose-600 hover:font-bold ml-1" title="刪除分類">×</button>
+                  <span>{c.emoji || '📝'}</span>
+                  <span>{c.type === 'income' ? '收' : '支'} | {c.major} / {c.sub}</span>
+                  <button type="button" onClick={() => deleteCategory(c)} className="text-rose-500 hover:font-bold ml-1">×</button>
                 </div>
               ))}
             </div>
