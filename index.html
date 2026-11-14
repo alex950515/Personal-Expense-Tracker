@@ -619,14 +619,14 @@
           />
 
           {/* 電腦版左側側邊欄 (放大字體與間距) */}
-          <aside className="hidden md:flex md:w-72 md:flex-col bg-latte-100 dark:bg-neutral-800 border-r border-latte-200 dark:border-neutral-700 p-6 justify-between shrink-0">
-            <div className="space-y-6">
+          <aside className="hidden md:flex md:w-68 md:flex-col bg-latte-100/80 dark:bg-neutral-800/90 border-r border-latte-200/80 dark:border-neutral-700/80 p-5 justify-between shrink-0 shadow-xs">
+            <div className="space-y-5">
               <div>
-                <div className="text-xs text-latte-500 dark:text-neutral-400 mb-1.5">目前使用帳本</div>
+                <div className="text-[11px] font-medium text-latte-500 dark:text-neutral-400 mb-1.5 uppercase tracking-wider">目前使用帳本</div>
                 <select
                   value={activeLedgerId}
                   onChange={(e) => setActiveLedgerId(e.target.value)}
-                  className="w-full p-2.5 rounded-xl bg-white dark:bg-neutral-700 border border-latte-300 dark:border-neutral-600 font-semibold text-sm"
+                  className="w-full p-2.5 rounded-xl bg-white dark:bg-neutral-700/80 border border-latte-200 dark:border-neutral-600 font-semibold text-sm shadow-2xs focus:outline-none focus:ring-2 focus:ring-latte-500"
                 >
                   {activeLedgers.map((l) => (
                     <option key={l.id} value={l.id}>
@@ -636,43 +636,43 @@
                 </select>
               </div>
 
-              <nav className="space-y-2">
+              <nav className="space-y-1.5">
                 {navItems.map((item) => (
                   <button
                     key={item.id}
                     onClick={() => setActiveTab(item.id)}
-                    className={`w-full text-left px-5 py-4 rounded-2xl font-semibold text-base transition ${
+                    className={`w-full text-left px-4.5 py-3.5 rounded-2xl font-semibold text-sm transition flex items-center justify-between ${
                       activeTab === item.id
-                        ? 'bg-latte-600 text-white shadow-sm'
-                        : 'text-latte-800 dark:text-neutral-200 hover:bg-latte-200/70 dark:hover:bg-neutral-700'
+                        ? 'bg-latte-600 text-white shadow-xs'
+                        : 'text-latte-800 dark:text-neutral-200 hover:bg-latte-200/50 dark:hover:bg-neutral-700/60'
                     }`}
                   >
-                    {item.label}
+                    <span>{item.label}</span>
                     {item.id === 'settings' && invitations.length > 0 && (
-                      <span className="ml-2 px-2.5 py-0.5 text-xs rounded-full bg-red-500 text-white">{invitations.length}</span>
+                      <span className="px-2 py-0.5 text-xs rounded-full bg-red-500 text-white font-bold">{invitations.length}</span>
                     )}
                   </button>
                 ))}
               </nav>
             </div>
 
-            <div className="pt-4 border-t border-latte-200 dark:border-neutral-700 space-y-3 text-sm text-latte-600 dark:text-neutral-400">
-              <div>暱稱：{profile?.nickname}</div>
+            <div className="pt-4 border-t border-latte-200/60 dark:border-neutral-700/60 space-y-2.5 text-xs text-latte-600 dark:text-neutral-400">
+              <div className="px-1 truncate font-medium">暱稱：{profile?.nickname}</div>
               <button
                 onClick={() => firebase.auth().signOut()}
-                className="w-full py-2.5 rounded-xl border border-latte-300 dark:border-neutral-600 hover:bg-latte-200 dark:hover:bg-neutral-700 text-center font-medium"
+                className="w-full py-2.5 rounded-xl border border-latte-300 dark:border-neutral-600 hover:bg-latte-200/60 dark:hover:bg-neutral-700 text-center font-medium transition"
               >
                 登出帳號
               </button>
             </div>
           </aside>
 
-          {/* 手機版頂部帳本切換列 (已縮小尺寸) */}
-          <header className="md:hidden sticky top-0 z-20 bg-latte-100/95 dark:bg-neutral-800/95 backdrop-blur border-b border-latte-200 dark:border-neutral-700 px-3 py-2 flex items-center justify-center">
+          {/* 手機版頂部帳本切換列 (精緻適中尺寸，避免過大佔空間) */}
+          <header className="md:hidden sticky top-0 z-20 bg-latte-50/95 dark:bg-neutral-900/95 backdrop-blur-md border-b border-latte-200/70 dark:border-neutral-800 px-3 py-2.5 flex items-center justify-center shadow-2xs">
             <select
               value={activeLedgerId}
               onChange={(e) => setActiveLedgerId(e.target.value)}
-              className="w-auto min-w-[180px] max-w-[260px] px-3 py-1.5 rounded-lg bg-white dark:bg-neutral-700 border border-latte-300 dark:border-neutral-600 font-semibold text-xs"
+              className="w-auto min-w-[170px] max-w-[240px] px-3 py-1.5 rounded-xl bg-white dark:bg-neutral-800 border border-latte-300/80 dark:border-neutral-700 font-semibold text-xs shadow-2xs"
             >
               {activeLedgers.length === 0 && <option value="">尚無啟用中的帳本</option>}
               {activeLedgers.map((l) => (
@@ -683,15 +683,15 @@
             </select>
           </header>
 
-          <main className="flex-1 max-w-4xl w-full mx-auto p-4 md:p-8 space-y-6">
+          <main className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 md:p-8 space-y-5">
             {!activeLedger && activeTab !== 'settings' ? (
-              <div className="bg-white dark:bg-neutral-800 rounded-2xl p-8 border border-latte-200 dark:border-neutral-700 text-center space-y-4">
+              <div className="bg-white dark:bg-neutral-800 rounded-3xl p-8 border border-latte-200 dark:border-neutral-700 text-center space-y-3.5 shadow-xs">
                 <div className="text-base font-bold text-latte-800 dark:text-latte-100">目前沒有啟用中的帳本</div>
                 <p className="text-sm text-latte-600 dark:text-neutral-400">您的帳本可能已全部封存或正在建立中，請前往設定頁解除封存或建立新帳本。</p>
                 <button
                   type="button"
                   onClick={() => setActiveTab('settings')}
-                  className="px-5 py-2.5 rounded-xl bg-latte-600 text-white text-sm font-semibold"
+                  className="px-5 py-2.5 rounded-xl bg-latte-600 text-white text-sm font-semibold transition"
                 >
                   前往帳本設定
                 </button>
@@ -779,22 +779,22 @@
             )}
           </main>
 
-          {/* 手機版底部導覽列（項目放大一倍，且中央加入更大且明顯的「記帳」按鈕） */}
-          <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 dark:bg-neutral-800/95 backdrop-blur border-t border-latte-200 dark:border-neutral-700 grid grid-cols-5 py-3 text-sm items-center">
+          {/* 手機版底部導覽列（平衡導覽項目與特大舒適的中央「記帳」圓形按鈕） */}
+          <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md border-t border-latte-200/80 dark:border-neutral-800 grid grid-cols-5 py-2 px-1 text-xs items-center shadow-lg">
             <button
               onClick={() => setActiveTab('home')}
-              className={`flex flex-col items-center justify-center font-medium ${activeTab === 'home' ? 'text-latte-700 dark:text-latte-300 font-bold' : 'text-neutral-500'}`}
+              className={`flex flex-col items-center justify-center py-1 font-medium transition ${activeTab === 'home' ? 'text-latte-700 dark:text-latte-200 font-bold' : 'text-neutral-400 dark:text-neutral-500'}`}
             >
-              <span className="text-base py-1">首頁</span>
+              <span className="text-xs sm:text-sm">首頁</span>
             </button>
             <button
               onClick={() => setActiveTab('stats')}
-              className={`flex flex-col items-center justify-center font-medium ${activeTab === 'stats' ? 'text-latte-700 dark:text-latte-300 font-bold' : 'text-neutral-500'}`}
+              className={`flex flex-col items-center justify-center py-1 font-medium transition ${activeTab === 'stats' ? 'text-latte-700 dark:text-latte-200 font-bold' : 'text-neutral-400 dark:text-neutral-500'}`}
             >
-              <span className="text-base py-1">統計</span>
+              <span className="text-xs sm:text-sm">統計</span>
             </button>
             
-            {/* 手機版置中放大「記帳」按鈕 */}
+            {/* 手機版置中特大顯眼的「記帳」按鈕 (不擁擠且極佳觸控回饋) */}
             <div className="flex justify-center">
               <button
                 type="button"
@@ -806,7 +806,7 @@
                   setEditingTx(null);
                   setTxModalOpen(true);
                 }}
-                className="w-14 h-14 rounded-full bg-latte-600 hover:bg-latte-700 text-white font-bold text-base shadow-lg flex items-center justify-center -mt-4 border-4 border-white dark:border-neutral-800 transition transform active:scale-95"
+                className="w-16 h-16 rounded-full bg-latte-600 hover:bg-latte-700 active:bg-latte-800 text-white font-bold text-base shadow-xl flex items-center justify-center -mt-6 border-4 border-latte-50 dark:border-neutral-900 transition transform active:scale-95"
                 title="記帳"
               >
                 記帳
@@ -815,17 +815,17 @@
 
             <button
               onClick={() => setActiveTab('budgets')}
-              className={`flex flex-col items-center justify-center font-medium ${activeTab === 'budgets' ? 'text-latte-700 dark:text-latte-300 font-bold' : 'text-neutral-500'}`}
+              className={`flex flex-col items-center justify-center py-1 font-medium transition ${activeTab === 'budgets' ? 'text-latte-700 dark:text-latte-200 font-bold' : 'text-neutral-400 dark:text-neutral-500'}`}
             >
-              <span className="text-base py-1">預算</span>
+              <span className="text-xs sm:text-sm">預算</span>
             </button>
             <button
               onClick={() => setActiveTab('settings')}
-              className={`flex flex-col items-center justify-center font-medium relative ${activeTab === 'settings' ? 'text-latte-700 dark:text-latte-300 font-bold' : 'text-neutral-500'}`}
+              className={`flex flex-col items-center justify-center py-1 font-medium relative transition ${activeTab === 'settings' ? 'text-latte-700 dark:text-latte-200 font-bold' : 'text-neutral-400 dark:text-neutral-500'}`}
             >
-              <span className="text-base py-1">設定</span>
+              <span className="text-xs sm:text-sm">設定</span>
               {invitations.length > 0 && (
-                <span className="absolute top-1 right-3 w-2.5 h-2.5 rounded-full bg-red-500"></span>
+                <span className="absolute top-0 right-3 w-2 h-2 rounded-full bg-red-500"></span>
               )}
             </button>
           </nav>
@@ -851,8 +851,8 @@
       const [showCustom, setShowCustom] = useState(false);
 
       return (
-        <div className="space-y-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2.5">
             <div className="flex items-center gap-2">
               <input
                 type="month"
@@ -861,12 +861,12 @@
                   setCustomDateRange({ enabled: false, start: '', end: '' });
                   setSelectedMonth(e.target.value);
                 }}
-                className="px-3 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-latte-300 dark:border-neutral-600 text-sm font-semibold"
+                className="px-3 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-latte-200 dark:border-neutral-700 text-xs sm:text-sm font-semibold shadow-2xs"
               />
               <button
                 type="button"
                 onClick={() => setShowCustom(!showCustom)}
-                className="px-3 py-2 rounded-xl border border-latte-300 dark:border-neutral-600 text-xs"
+                className="px-3 py-2 rounded-xl border border-latte-200 dark:border-neutral-700 text-xs bg-white dark:bg-neutral-800 font-medium"
               >
                 自訂區間
               </button>
@@ -875,14 +875,14 @@
             <button
               type="button"
               onClick={onAddClick}
-              className="hidden md:inline-flex px-5 py-2.5 rounded-xl bg-latte-600 hover:bg-latte-700 text-white font-semibold shadow-sm transition"
+              className="hidden md:inline-flex px-4 py-2.5 rounded-xl bg-latte-600 hover:bg-latte-700 text-white font-semibold text-sm shadow-xs transition"
             >
               + 新增收支
             </button>
           </div>
 
           {showCustom && (
-            <div className="p-4 rounded-2xl bg-latte-100 dark:bg-neutral-800 flex flex-wrap items-center gap-3 text-sm">
+            <div className="p-3.5 rounded-2xl bg-white dark:bg-neutral-800 border border-latte-200 dark:border-neutral-700 flex flex-wrap items-center gap-2.5 text-xs">
               <span>起始：</span>
               <input
                 type="date"
@@ -900,65 +900,65 @@
             </div>
           )}
 
-          {/* 月度財務摘要：縮小且並排顯示 */}
-          <div className="grid grid-cols-3 gap-2.5">
-            <div className="p-3.5 rounded-2xl bg-white dark:bg-neutral-800 border border-latte-200 dark:border-neutral-700 shadow-xs">
-              <div className="text-[11px] text-latte-500 dark:text-neutral-400">本月結餘</div>
-              <div className={`text-base sm:text-lg font-bold mt-0.5 ${summary.balance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+          {/* 月度財務摘要：縮小且並排顯示，間距舒適適中 */}
+          <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
+            <div className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-neutral-800 border border-latte-200/80 dark:border-neutral-700 shadow-2xs">
+              <div className="text-[11px] font-medium text-latte-500 dark:text-neutral-400">本月結餘</div>
+              <div className={`text-sm sm:text-base font-bold mt-1 tracking-tight ${summary.balance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                 {summary.balance >= 0 ? `+${currencySymbol}${summary.balance.toLocaleString()}` : `-${currencySymbol}${Math.abs(summary.balance).toLocaleString()}`}
               </div>
             </div>
-            <div className="p-3.5 rounded-2xl bg-white dark:bg-neutral-800 border border-latte-200 dark:border-neutral-700 shadow-xs">
-              <div className="text-[11px] text-latte-500 dark:text-neutral-400">本月收入</div>
-              <div className="text-base sm:text-lg font-bold mt-0.5 text-emerald-600 dark:text-emerald-400">
+            <div className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-neutral-800 border border-latte-200/80 dark:border-neutral-700 shadow-2xs">
+              <div className="text-[11px] font-medium text-latte-500 dark:text-neutral-400">本月收入</div>
+              <div className="text-sm sm:text-base font-bold mt-1 text-emerald-600 dark:text-emerald-400 tracking-tight">
                 +{currencySymbol}{summary.income.toLocaleString()}
               </div>
             </div>
-            <div className="p-3.5 rounded-2xl bg-white dark:bg-neutral-800 border border-latte-200 dark:border-neutral-700 shadow-xs">
-              <div className="text-[11px] text-latte-500 dark:text-neutral-400">本月支出</div>
-              <div className="text-base sm:text-lg font-bold mt-0.5 text-rose-600 dark:text-rose-400">
+            <div className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-neutral-800 border border-latte-200/80 dark:border-neutral-700 shadow-2xs">
+              <div className="text-[11px] font-medium text-latte-500 dark:text-neutral-400">本月支出</div>
+              <div className="text-sm sm:text-base font-bold mt-1 text-rose-600 dark:text-rose-400 tracking-tight">
                 -{currencySymbol}{summary.expense.toLocaleString()}
               </div>
             </div>
           </div>
 
-          <div className="bg-white dark:bg-neutral-800 rounded-2xl border border-latte-200 dark:border-neutral-700 overflow-hidden">
-            <div className="px-5 py-3.5 border-b border-latte-100 dark:border-neutral-700 font-semibold text-sm flex justify-between">
+          <div className="bg-white dark:bg-neutral-800 rounded-2xl border border-latte-200/80 dark:border-neutral-700 overflow-hidden shadow-2xs">
+            <div className="px-4.5 py-3 border-b border-latte-100 dark:border-neutral-700/80 font-semibold text-xs sm:text-sm flex justify-between">
               <span>收支明細（共 {transactions.length} 筆）</span>
             </div>
             {transactions.length === 0 ? (
-              <div className="p-8 text-center text-sm text-latte-500">此期間尚無收支紀錄</div>
+              <div className="p-8 text-center text-xs sm:text-sm text-latte-500 dark:text-neutral-400">此期間尚無收支紀錄</div>
             ) : (
-              <div className="divide-y divide-latte-100 dark:divide-neutral-700">
+              <div className="divide-y divide-latte-100 dark:divide-neutral-700/60">
                 {transactions.map((tx) => (
-                  <div key={tx.id} className="p-4 flex items-center justify-between gap-4 hover:bg-latte-50/70 dark:hover:bg-neutral-700/40">
+                  <div key={tx.id} className="p-3.5 sm:p-4 flex items-center justify-between gap-3 hover:bg-latte-50/60 dark:hover:bg-neutral-700/30 transition">
                     <div className="space-y-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-latte-900 dark:text-white truncate">
+                        <span className="font-semibold text-xs sm:text-sm text-latte-900 dark:text-white truncate">
                           {tx.item_name || tx.sub_category}
                         </span>
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-latte-100 dark:bg-neutral-700 text-latte-700 dark:text-latte-300">
+                        <span className="text-[11px] px-2 py-0.5 rounded-full bg-latte-100 dark:bg-neutral-700 text-latte-700 dark:text-latte-300">
                           {tx.major_category} · {tx.sub_category}
                         </span>
                         {activeLedger?.type === 'couple' && (
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300">
-                            付款人：{tx.payer_nickname}
+                          <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300">
+                            {tx.payer_nickname}
                           </span>
                         )}
                       </div>
-                      <div className="text-xs text-latte-500 dark:text-neutral-400 flex gap-3 flex-wrap">
+                      <div className="text-[11px] sm:text-xs text-latte-500 dark:text-neutral-400 flex gap-2.5 flex-wrap">
                         <span>{tx.date}</span>
                         <span>{tx.payment_method}</span>
                         {tx.note && <span className="truncate">備註：{tx.note}</span>}
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-3 shrink-0">
-                      <span className={`font-bold text-base ${tx.type === 'income' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                    <div className="flex items-center gap-2.5 shrink-0">
+                      <span className={`font-bold text-sm sm:text-base ${tx.type === 'income' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                         {tx.type === 'income' ? `+${currencySymbol}${Number(tx.amount).toLocaleString()}` : `-${currencySymbol}${Number(tx.amount).toLocaleString()}`}
                       </span>
-                      <button onClick={() => onEditClick(tx)} className="text-xs text-latte-600 hover:underline">編輯</button>
-                      <button onClick={() => onDeleteClick(tx)} className="text-xs text-rose-600 hover:underline">刪除</button>
+                      <button onClick={() => onEditClick(tx)} className="text-xs text-latte-600 dark:text-neutral-300 hover:underline px-1">編輯</button>
+                      <button onClick={() => onDeleteClick(tx)} className="text-xs text-rose-600 hover:underline px-1">刪除</button>
                     </div>
                   </div>
                 ))}
