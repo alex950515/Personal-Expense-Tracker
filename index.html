@@ -80,6 +80,47 @@
       return dateStr.slice(0, 7);
     }
 
+    // 安全的四則運算計算函式（避免使用 new Function 觸發 CSP 阻擋或語法錯誤）
+    function evaluateMathExpression(expr) {
+      try {
+        const sanitized = String(expr).replace(/×/g, '*').replace(/÷/g, '/').replace(/[^0-9+\-*/.]/g, '');
+        if (!sanitized) return 0;
+        const cleaned = sanitized.replace(/[+\-*/.]+$/, '');
+        if (!cleaned) return 0;
+        const tokens = cleaned.match(/(\d+\.?\d*|\.\d+|[+\-*/])/g);
+        if (!tokens || tokens.length === 0) return 0;
+
+        // 先乘除
+        const stack = [];
+        let i = 0;
+        while (i < tokens.length) {
+          const token = tokens[i];
+          if (token === '*' || token === '/') {
+            const prev = parseFloat(stack.pop() || '0');
+            const next = parseFloat(tokens[i + 1] || '0');
+            if (token === '*') stack.push(prev * next);
+            else stack.push(next !== 0 ? prev / next : 0);
+            i += 2;
+          } else {
+            stack.push(token);
+            i += 1;
+          }
+        }
+
+        // 後加減
+        let result = parseFloat(stack[0] || '0');
+        for (let j = 1; j < stack.length; j += 2) {
+          const op = stack[j];
+          const val = parseFloat(stack[j + 1] || '0');
+          if (op === '+') result += val;
+          else if (op === '-') result -= val;
+        }
+        return isNaN(result) || !isFinite(result) ? 0 : result;
+      } catch (e) {
+        return 0;
+      }
+    }
+
     function parseFirebaseConfig(input) {
       try {
         const normalized = input.replace(/\u00A0/g, ' ').trim();
@@ -837,7 +878,9 @@
             <div className="flex justify-center">
               <button
                 type="button"
-                onClick={() => {
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
                   if (!activeLedger) {
                     showToast('請先在設定中選擇或建立帳本');
                     return;
@@ -845,7 +888,7 @@
                   setEditingTx(null);
                   setTxModalOpen(true);
                 }}
-                className="px-6 py-4 rounded-full bg-latte-600 hover:bg-latte-700 active:bg-latte-800 text-white font-extrabold text-base sm:text-lg shadow-xl flex items-center justify-center whitespace-nowrap -mt-8 border-4 border-latte-50 dark:border-neutral-900 transition transform active:scale-95"
+                className="px-6 py-4 rounded-full bg-latte-600 hover:bg-latte-700 active:bg-latte-800 text-white font-extrabold text-base sm:text-lg shadow-xl flex items-center justify-center whitespace-nowrap -mt-8 border-4 border-latte-50 dark:border-neutral-900 transition transform active:scale-95 touch-manipulation"
                 title="記帳"
               >
                 + 記帳
@@ -1114,46 +1157,68 @@
       const [itemName, setItemName] = useState(editingTx?.item_name || '');
       const [note, setNote] = useState(editingTx?.note || '');
 
-      const filteredCats = useMemo(() => categories.filter((c) => c && c.type === type && !c.is_archived), [categories, type]);
+      // 若資料庫分類尚未載入完成或為空，提供預設分類保底，避免畫面異常
+      const effectiveCategories = useMemo(() => {
+        const valid = (categories || []).filter((c) => c && !c.is_archived);
+        if (valid.length > 0) return valid;
+        const fallback = [];
+        DEFAULT_CATEGORIES.forEach((cat) => {
+          cat.subs.forEach((sub) => {
+            fallback.push({ id: `${cat.type}_${cat.major}_${sub}`, type: cat.type, emoji: cat.emoji, major: cat.major, sub });
+          });
+        });
+        return fallback;
+      }, [categories]);
+
+      const filteredCats = useMemo(() => effectiveCategories.filter((c) => c.type === type), [effectiveCategories, type]);
       const majors = useMemo(() => [...new Set(filteredCats.map((c) => c.major))], [filteredCats]);
 
       const [selectedMajor, setSelectedMajor] = useState(() => {
         if (editingTx?.major_category) return editingTx.major_category;
-        return majors.length > 0 ? majors[0] : '';
+        const initialCats = effectiveCategories.filter((c) => c.type === (editingTx?.type || 'expense'));
+        return initialCats.length > 0 ? initialCats[0].major : '';
       });
 
       const [selectedSubCat, setSelectedSubCat] = useState(() => {
         if (editingTx) return { major: editingTx.major_category, sub: editingTx.sub_category, emoji: editingTx.emoji || '📝' };
-        if (filteredCats.length > 0) {
-          const first = filteredCats[0];
+        const initialCats = effectiveCategories.filter((c) => c.type === 'expense');
+        if (initialCats.length > 0) {
+          const first = initialCats[0];
           return { major: first.major, sub: first.sub, emoji: first.emoji || '📝' };
         }
         return null;
       });
 
+      // 當切換支出/收入或分類資料更新時，安全同步預設大分類與子分類（避免無窮渲染迴圈）
+      const majorsKey = majors.join('|');
       useEffect(() => {
         if (majors.length > 0 && (!selectedMajor || !majors.includes(selectedMajor))) {
-          setSelectedMajor(majors[0]);
-        }
-      }, [majors]);
-
-      useEffect(() => {
-        if (filteredCats.length > 0) {
-          const currentValid = filteredCats.some((c) => c.major === selectedSubCat?.major && c.sub === selectedSubCat?.sub);
-          if (!currentValid) {
-            const first = filteredCats.find((c) => c.major === selectedMajor) || filteredCats[0];
-            if (first) {
-              setSelectedSubCat({ major: first.major, sub: first.sub, emoji: first.emoji || '📝' });
-            }
+          const nextMajor = majors[0];
+          setSelectedMajor(nextMajor);
+          const firstSub = filteredCats.find((c) => c.major === nextMajor) || filteredCats[0];
+          if (firstSub) {
+            setSelectedSubCat({ major: firstSub.major, sub: firstSub.sub, emoji: firstSub.emoji || '📝' });
           }
         }
-      }, [type, filteredCats, selectedMajor]);
+      }, [type, majorsKey]);
+
+      const handleSelectMajor = (m) => {
+        setSelectedMajor(m);
+        const firstSub = filteredCats.find((c) => c.major === m);
+        if (firstSub) {
+          setSelectedSubCat({ major: firstSub.major, sub: firstSub.sub, emoji: firstSub.emoji || '📝' });
+        }
+      };
 
       const currentMajorSubs = useMemo(() => {
         return filteredCats.filter((c) => c.major === selectedMajor);
       }, [filteredCats, selectedMajor]);
 
-      const activePms = useMemo(() => paymentMethods.filter((p) => p && p.is_active), [paymentMethods]);
+      const activePms = useMemo(() => {
+        const list = (paymentMethods || []).filter((p) => p && p.is_active);
+        return list.length > 0 ? list : DEFAULT_PAYMENT_METHODS.map((name) => ({ id: name, name, is_active: true }));
+      }, [paymentMethods]);
+
       const [paymentMethod, setPaymentMethod] = useState(() => {
         if (editingTx?.payment_method) return editingTx.payment_method;
         const defaultCash = activePms.find((p) => p.name === '現金');
@@ -1174,17 +1239,15 @@
           return;
         }
         if (val === '=') {
-          try {
-            const sanitized = amountStr.replace(/×/g, '*').replace(/÷/g, '/');
-            const result = Function(`return ${sanitized}`)();
-            if (!isNaN(result) && isFinite(result)) {
-              setAmountStr(String(Number(result.toFixed(2))));
-            }
-          } catch (e) {}
+          const result = evaluateMathExpression(amountStr);
+          setAmountStr(String(Number(result.toFixed(2))));
           return;
         }
         if (['+', '-', '×', '÷'].includes(val)) {
-          if (['+', '-', '×', '÷'].some((op) => amountStr.endsWith(op))) return;
+          if (['+', '-', '×', '÷'].some((op) => amountStr.endsWith(op))) {
+            setAmountStr((prev) => prev.slice(0, -1) + val);
+            return;
+          }
           setAmountStr((prev) => prev + val);
           return;
         }
@@ -1203,13 +1266,7 @@
       }
 
       async function handleSubmit() {
-        let finalAmount = 0;
-        try {
-          const sanitized = amountStr.replace(/×/g, '*').replace(/÷/g, '/');
-          finalAmount = Number(Function(`return ${sanitized}`)());
-        } catch (e) {
-          finalAmount = Number(amountStr) || 0;
-        }
+        const finalAmount = evaluateMathExpression(amountStr);
 
         if (!finalAmount || finalAmount <= 0) {
           showToast('請輸入大於 0 的有效金額');
@@ -1233,7 +1290,7 @@
           if (editingTx) {
             await db.collection('transactions').doc(editingTx.id).update({
               type,
-              amount: finalAmount,
+              amount: Number(finalAmount.toFixed(2)),
               major_category: selectedSubCat.major,
               sub_category: selectedSubCat.sub,
               date,
@@ -1246,7 +1303,7 @@
             await db.collection('transactions').add({
               ledger_id: activeLedger.id,
               type,
-              amount: finalAmount,
+              amount: Number(finalAmount.toFixed(2)),
               major_category: selectedSubCat.major,
               sub_category: selectedSubCat.sub,
               date,
@@ -1270,7 +1327,8 @@
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
           <div className="bg-white dark:bg-neutral-900 rounded-t-3xl sm:rounded-3xl max-w-lg w-full p-4 sm:p-6 space-y-3.5 shadow-2xl max-h-[96vh] overflow-y-auto">
             
-            <div className="flex justify-end items-center pb-1">
+            <div className="flex justify-between items-center pb-1">
+              <span className="text-sm font-bold text-latte-800 dark:text-latte-100">{editingTx ? '編輯收支紀錄' : '新增收支紀錄'}</span>
               <button type="button" onClick={onClose} className="p-1.5 rounded-full text-neutral-400 hover:bg-latte-100 dark:hover:bg-neutral-800 shrink-0">✕</button>
             </div>
 
@@ -1291,7 +1349,7 @@
                   <button
                     key={m}
                     type="button"
-                    onClick={() => setSelectedMajor(m)}
+                    onClick={() => handleSelectMajor(m)}
                     className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
                       selectedMajor === m
                         ? 'bg-latte-800 text-white shadow-2xs dark:bg-neutral-100 dark:text-neutral-900'
@@ -1392,20 +1450,30 @@
                   {rIdx === 0 && (
                     <button
                       type="button"
-                      onClick={() => handleKeyPress('AC')}
-                      className="py-3 rounded-xl bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 font-bold text-xs border border-amber-200 dark:border-amber-800 shadow-2xs transition active:scale-95"
+                      onClick={() => setPmModalOpen(true)}
+                      className="py-3 px-1 rounded-xl bg-latte-200/80 dark:bg-neutral-700 text-latte-800 dark:text-neutral-100 font-bold text-xs shadow-2xs transition active:scale-95 flex flex-col items-center justify-center leading-tight border border-latte-300 dark:border-neutral-600"
                     >
-                      AC
+                      <span>付款方式</span>
+                      <span className="text-[10px] font-normal truncate max-w-full">{paymentMethod || '現金'}</span>
                     </button>
                   )}
                   {rIdx === 1 && (
-                    <button
-                      type="button"
-                      onClick={() => handleKeyPress('+')}
-                      className="py-3 rounded-xl bg-latte-100 dark:bg-neutral-700 text-latte-800 dark:text-neutral-200 font-bold text-sm border border-latte-200 dark:border-neutral-600 shadow-2xs transition active:scale-95"
-                    >
-                      + / -
-                    </button>
+                    <div className="grid grid-cols-2 gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleKeyPress('AC')}
+                        className="py-3 rounded-xl bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 font-bold text-xs border border-amber-200 dark:border-amber-800 shadow-2xs transition active:scale-95"
+                      >
+                        AC
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleKeyPress('backspace')}
+                        className="py-3 rounded-xl bg-latte-100 dark:bg-neutral-800 text-latte-800 dark:text-neutral-200 font-bold text-sm shadow-2xs border border-latte-200 dark:border-neutral-700 transition active:scale-95"
+                      >
+                        ⌫
+                      </button>
+                    </div>
                   )}
                   {rIdx === 2 && (
                     <button
@@ -1429,31 +1497,29 @@
                   )}
                 </React.Fragment>
               ))}
+            </div>
 
-              {/* 鍵盤右上：付款方式 */}
-              <button
-                type="button"
-                onClick={() => setPmModalOpen(true)}
-                className="col-start-4 row-start-1 py-3 px-1 rounded-xl bg-latte-200/80 dark:bg-neutral-700 text-latte-800 dark:text-neutral-100 font-bold text-xs shadow-2xs transition active:scale-95 flex flex-col items-center justify-center leading-tight border border-latte-300 dark:border-neutral-600"
-              >
-                <span>付款方式</span>
-                <span className="text-[10px] font-normal truncate max-w-full">{paymentMethod || '現金'}</span>
-              </button>
-
-              {/* 鍵盤右二：退格鍵 */}
-              <button
-                type="button"
-                onClick={() => handleKeyPress('backspace')}
-                className="col-start-4 row-start-2 py-3 rounded-xl bg-latte-100 dark:bg-neutral-800 text-latte-800 dark:text-neutral-200 font-bold text-base shadow-2xs border border-latte-200 dark:border-neutral-700 transition active:scale-95"
-              >
-                ⌫
-              </button>
+            {/* 輔助運算符列（+ - × ÷ =） */}
+            <div className="grid grid-cols-5 gap-1.5 pt-0.5">
+              {['+', '-', '×', '÷', '='].map((op) => (
+                <button
+                  key={op}
+                  type="button"
+                  onClick={() => handleKeyPress(op)}
+                  className={`py-2 rounded-xl font-bold text-sm border transition active:scale-95 ${
+                    op === '='
+                      ? 'bg-latte-700 text-white border-latte-700'
+                      : 'bg-latte-100 dark:bg-neutral-800 text-latte-800 dark:text-neutral-200 border-latte-200 dark:border-neutral-700'
+                  }`}
+                >
+                  {op}
+                </button>
+              ))}
             </div>
           </div>
-
           {/* 日期選擇彈跳窗 */}
           {dateModalOpen && (
-            <div className="fixed inset-0 z-60 bg-black/50 flex items-center justify-center p-4">
+            <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
               <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 max-w-xs w-full space-y-4 shadow-xl border border-latte-200 dark:border-neutral-700">
                 <h3 className="font-bold text-base text-latte-900 dark:text-white">選擇記帳日期</h3>
                 <input
@@ -1472,7 +1538,7 @@
 
           {/* 付款方式選擇彈跳窗 */}
           {pmModalOpen && (
-            <div className="fixed inset-0 z-60 bg-black/50 flex items-center justify-center p-4">
+            <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
               <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 max-w-xs w-full space-y-3 shadow-xl border border-latte-200 dark:border-neutral-700">
                 <h3 className="font-bold text-base text-latte-900 dark:text-white">選擇付款方式</h3>
                 <div className="space-y-1.5 max-h-48 overflow-y-auto">
@@ -1493,116 +1559,6 @@
               </div>
             </div>
           )}
-        </div>
-      );
-    }
-
-    function StatsView({ activeLedger, currencySymbol, selectedMonth, setSelectedMonth, transactions }) {
-      const stats = useMemo(() => {
-        let incomeTotal = 0;
-        let expenseTotal = 0;
-        const expenseTree = {};
-        const incomeTree = {};
-        const memberPaid = {};
-
-        transactions.forEach((tx) => {
-          const amt = Number(tx.amount) || 0;
-          if (tx.type === 'income') {
-            incomeTotal += amt;
-            if (!incomeTree[tx.major_category]) incomeTree[tx.major_category] = { total: 0, subs: {} };
-            incomeTree[tx.major_category].total += amt;
-            incomeTree[tx.major_category].subs[tx.sub_category] = (incomeTree[tx.major_category].subs[tx.sub_category] || 0) + amt;
-          } else {
-            expenseTotal += amt;
-            if (!expenseTree[tx.major_category]) expenseTree[tx.major_category] = { total: 0, subs: {} };
-            expenseTree[tx.major_category].total += amt;
-            expenseTree[tx.major_category].subs[tx.sub_category] = (expenseTree[tx.major_category].subs[tx.sub_category] || 0) + amt;
-
-            if (activeLedger?.type === 'couple') {
-              const name = tx.payer_nickname || '成員';
-              memberPaid[name] = (memberPaid[name] || 0) + amt;
-            }
-          }
-        });
-
-        return { incomeTotal, expenseTotal, balance: incomeTotal - expenseTotal, expenseTree, incomeTree, memberPaid };
-      }, [transactions, activeLedger]);
-
-      return (
-        <div className="space-y-6">
-          <div className="flex items-center gap-2">
-            <input
-              type="month"
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="px-3 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-latte-300 dark:border-neutral-600 text-sm font-semibold"
-            />
-          </div>
-
-          <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-2 text-sm">
-            <div className="flex justify-between"><span>本月收入總額：</span><span className="font-bold text-emerald-600">+{currencySymbol}{stats.incomeTotal.toLocaleString()}</span></div>
-            <div className="flex justify-between"><span>本月支出總額：</span><span className="font-bold text-rose-600">-{currencySymbol}{stats.expenseTotal.toLocaleString()}</span></div>
-            <div className="flex justify-between border-t border-latte-100 dark:border-neutral-700 pt-2">
-              <span>本月結餘：</span>
-              <span className="font-bold">{stats.balance >= 0 ? `+${currencySymbol}${stats.balance.toLocaleString()}` : `-${currencySymbol}${Math.abs(stats.balance).toLocaleString()}`}</span>
-            </div>
-          </div>
-
-          {activeLedger?.type === 'couple' && (
-            <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-2 text-sm">
-              <h3 className="font-bold text-base mb-2">共同帳本成員實際付款統計</h3>
-              <div className="flex justify-between font-semibold">
-                <span>共同支出總額：</span>
-                <span>{currencySymbol}{stats.expenseTotal.toLocaleString()}</span>
-              </div>
-              {Object.entries(stats.memberPaid).map(([name, amt]) => (
-                <div key={name} className="flex justify-between pl-3 text-latte-700 dark:text-neutral-300">
-                  <span>- {name}：</span>
-                  <span>{currencySymbol}{amt.toLocaleString()}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-3 text-sm">
-              <h3 className="font-bold text-base text-rose-600">支出分類統計</h3>
-              {Object.keys(stats.expenseTree).length === 0 && <div className="text-latte-500">本月無支出紀錄</div>}
-              {Object.entries(stats.expenseTree).map(([major, data]) => (
-                <div key={major} className="space-y-1">
-                  <div className="font-bold flex justify-between">
-                    <span>{major}：</span>
-                    <span>{currencySymbol}{data.total.toLocaleString()}</span>
-                  </div>
-                  {Object.entries(data.subs).map(([sub, subAmt]) => (
-                    <div key={sub} className="flex justify-between pl-4 text-latte-600 dark:text-neutral-400">
-                      <span>- {sub}：</span>
-                      <span>{currencySymbol}{subAmt.toLocaleString()}</span>
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-
-            <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-3 text-sm">
-              <h3 className="font-bold text-base text-emerald-600">收入分類統計</h3>
-              {Object.keys(stats.incomeTree).length === 0 && <div className="text-latte-500">本月無收入紀錄</div>}
-              {Object.entries(stats.incomeTree).map(([major, data]) => (
-                <div key={major} className="space-y-1">
-                  <div className="font-bold flex justify-between">
-                    <span>{major}：</span>
-                    <span>{currencySymbol}{data.total.toLocaleString()}</span>
-                  </div>
-                  {Object.entries(data.subs).map(([sub, subAmt]) => (
-                    <div key={sub} className="flex justify-between pl-4 text-latte-600 dark:text-neutral-400">
-                      <span>- {sub}：</span>
-                      <span>{currencySymbol}{subAmt.toLocaleString()}</span>
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       );
     }
@@ -2279,7 +2235,7 @@
                 <div key={pm.id} className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs border ${!pm.is_active ? 'opacity-50' : ''}`}>
                   <span>{pm.name}</span>
                   <button type="button" onClick={() => togglePaymentMethodActive(pm)} className="text-xs text-latte-500 hover:underline">
-                    {pm.is_active ? '停,用' : '啟用'}
+                    {pm.is_active ? '停用' : '啟用'}
                   </button>
                 </div>
               ))}
