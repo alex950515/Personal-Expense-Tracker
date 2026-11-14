@@ -923,7 +923,7 @@
           </div>
 
           <div className="bg-white dark:bg-neutral-800 rounded-2xl border border-latte-200/80 dark:border-neutral-700 overflow-hidden shadow-2xs">
-            <div className="px-4.5 py-3 border-b border-latte-100 dark:border-neutral-700/80 font-semibold text-xs sm:text-sm flex justify-between">
+            <div className="px-5 py-3.5 border-b border-latte-100 dark:border-neutral-700/80 font-semibold text-xs sm:text-sm flex justify-between">
               <span>收支明細（共 {transactions.length} 筆）</span>
             </div>
             {transactions.length === 0 ? (
@@ -931,17 +931,17 @@
             ) : (
               <div className="divide-y divide-latte-100 dark:divide-neutral-700/60">
                 {transactions.map((tx) => (
-                  <div key={tx.id} className="p-3.5 sm:p-4 flex items-center justify-between gap-3 hover:bg-latte-50/60 dark:hover:bg-neutral-700/30 transition">
+                  <div key={tx.id} className="px-5 py-4 flex items-center justify-between gap-3 hover:bg-latte-50/60 dark:hover:bg-neutral-700/30 transition">
                     <div className="space-y-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-xs sm:text-sm text-latte-900 dark:text-white truncate">
                           {tx.item_name || tx.sub_category}
                         </span>
-                        <span className="text-[11px] px-2 py-0.5 rounded-full bg-latte-100 dark:bg-neutral-700 text-latte-700 dark:text-latte-300">
+                        <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-latte-100 dark:bg-neutral-700 text-latte-700 dark:text-latte-300">
                           {tx.major_category} · {tx.sub_category}
                         </span>
                         {activeLedger?.type === 'couple' && (
-                          <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300">
+                          <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300">
                             {tx.payer_nickname}
                           </span>
                         )}
