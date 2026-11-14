@@ -45,15 +45,15 @@
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useEffect, useMemo } = React;
+    const { useState, useEffect, useMemo, useRef } = React;
 
     const DEFAULT_CATEGORIES = [
-      { type: 'expense', major: '吃喝', subs: ['早餐', '午餐', '晚餐', '飲料', '點心', '宵夜'] },
-      { type: 'expense', major: '交通', subs: ['大眾運輸', '計程車', '加油', '停車', '其他交通'] },
-      { type: 'expense', major: '娛樂', subs: ['電影', '遊戲', '休閒活動'] },
-      { type: 'expense', major: '購物', subs: ['服飾', '生活用品', '電子產品'] },
-      { type: 'income', major: '工作收入', subs: ['薪水', '兼職', '獎金'] },
-      { type: 'income', major: '其他收入', subs: ['獎學金', '紅包', '利息', '其他收入'] },
+      { type: 'expense', major: '吃喝', subs: ['早餐', '午餐', '晚餐', '飲料', '點心', '宵夜'], emoji: '🍜' },
+      { type: 'expense', major: '交通', subs: ['大眾運輸', '計程車', '加油', '停車', '其他交通'], emoji: '🚇' },
+      { type: 'expense', major: '娛樂', subs: ['電影', '遊戲', '休閒活動'], emoji: '🎮' },
+      { type: 'expense', major: '購物', subs: ['服飾', '生活用品', '電子產品'], emoji: '🛍️' },
+      { type: 'income', major: '工作收入', subs: ['薪水', '兼職', '獎金'], emoji: '💰' },
+      { type: 'income', major: '其他收入', subs: ['獎學金', '紅包', '利息', '其他收入'], emoji: '🧧' },
     ];
 
     const DEFAULT_PAYMENT_METHODS = ['現金', '信用卡', '銀行轉帳'];
@@ -270,6 +270,7 @@
                 type: cat.type,
                 major: cat.major,
                 sub: sub,
+                emoji: cat.emoji || '📝',
                 is_archived: false,
               });
             });
@@ -497,7 +498,7 @@
                   </div>
                   <div className="flex items-center gap-2.5">
                     <span className="w-5 h-5 rounded-lg bg-latte-200/80 dark:bg-neutral-700 text-latte-700 dark:text-latte-200 flex items-center justify-center font-bold shrink-0">✓</span>
-                    <span>支援多幣別管理、月度預算進度追蹤與 Excel / JSON 備份</span>
+                    <span>支援多幣別管理、月度預算進度追蹤與備份管理</span>
                   </div>
                 </div>
 
@@ -616,15 +617,15 @@
             }}
           />
 
-          {/* 電腦版左側側邊欄 (置中對齊、加大間距與字體) */}
+          {/* 電腦版左側側邊欄 */}
           <aside className="hidden md:flex md:w-68 md:flex-col bg-latte-100/80 dark:bg-neutral-800/90 border-r border-latte-200/80 dark:border-neutral-700/80 p-5 justify-between shrink-0 shadow-xs">
-            <div className="space-y-6">
+            <div className="space-y-5">
               <div>
-                <div className="text-[11px] font-medium text-latte-500 dark:text-neutral-400 mb-2 uppercase tracking-wider text-center">目前使用帳本</div>
+                <div className="text-[11px] font-medium text-latte-500 dark:text-neutral-400 mb-1.5 uppercase tracking-wider px-1">目前使用帳本</div>
                 <select
                   value={activeLedgerId}
                   onChange={(e) => setActiveLedgerId(e.target.value)}
-                  className="w-full p-3 rounded-xl bg-white dark:bg-neutral-700/80 border border-latte-200 dark:border-neutral-600 font-semibold text-sm shadow-2xs focus:outline-none focus:ring-2 focus:ring-latte-500 text-center"
+                  className="w-full p-2.5 rounded-xl bg-white dark:bg-neutral-700/80 border border-latte-200 dark:border-neutral-600 font-semibold text-sm shadow-2xs focus:outline-none focus:ring-2 focus:ring-latte-500"
                 >
                   {activeLedgers.map((l) => (
                     <option key={l.id} value={l.id}>
@@ -634,14 +635,14 @@
                 </select>
               </div>
 
-              <nav className="space-y-2">
+              <nav className="space-y-1.5 px-1">
                 {navItems.map((item) => (
                   <button
                     key={item.id}
                     onClick={() => setActiveTab(item.id)}
-                    className={`w-full text-center px-5 py-4 rounded-2xl font-bold text-base transition flex items-center justify-center gap-2 ${
+                    className={`w-full text-left px-5 py-3.5 rounded-2xl font-semibold text-sm transition flex items-center justify-between ${
                       activeTab === item.id
-                        ? 'bg-latte-600 text-white shadow-md'
+                        ? 'bg-latte-600 text-white shadow-xs'
                         : 'text-latte-800 dark:text-neutral-200 hover:bg-latte-200/50 dark:hover:bg-neutral-700/60'
                     }`}
                   >
@@ -654,11 +655,11 @@
               </nav>
             </div>
 
-            <div className="pt-4 border-t border-latte-200/60 dark:border-neutral-700/60 space-y-3 text-xs text-latte-600 dark:text-neutral-400 text-center">
-              <div className="truncate font-medium">暱稱：{profile?.nickname}</div>
+            <div className="pt-4 border-t border-latte-200/60 dark:border-neutral-700/60 space-y-2.5 text-xs text-latte-600 dark:text-neutral-400">
+              <div className="px-1 truncate font-medium">暱稱：{profile?.nickname}</div>
               <button
                 onClick={() => firebase.auth().signOut()}
-                className="w-full py-3 rounded-xl border border-latte-300 dark:border-neutral-600 hover:bg-latte-200/60 dark:hover:bg-neutral-700 text-center font-medium transition"
+                className="w-full py-2.5 rounded-xl border border-latte-300 dark:border-neutral-600 hover:bg-latte-200/60 dark:hover:bg-neutral-700 text-center font-medium transition"
               >
                 登出帳號
               </button>
@@ -670,7 +671,7 @@
             <select
               value={activeLedgerId}
               onChange={(e) => setActiveLedgerId(e.target.value)}
-              className="w-auto min-w-[170px] max-w-[240px] px-3 py-1.5 rounded-xl bg-white dark:bg-neutral-800 border border-latte-300/80 dark:border-neutral-700 font-semibold text-xs text-center shadow-2xs"
+              className="w-auto min-w-[170px] max-w-[240px] px-3 py-1.5 rounded-xl bg-white dark:bg-neutral-800 border border-latte-300/80 dark:border-neutral-700 font-semibold text-xs shadow-2xs"
             >
               {activeLedgers.length === 0 && <option value="">尚無啟用中的帳本</option>}
               {activeLedgers.map((l) => (
@@ -706,6 +707,7 @@
                 setCustomDateRange={setCustomDateRange}
                 summary={summary}
                 transactions={periodTransactions}
+                categories={categories}
                 onAddClick={() => {
                   if (!activeLedger) {
                     showToast('請先選擇或建立帳本');
@@ -777,7 +779,7 @@
             )}
           </main>
 
-          {/* 手機版底部導覽列與加大「記帳」圓形按鈕 */}
+          {/* 手機版底部導覽列 */}
           <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md border-t border-latte-200/80 dark:border-neutral-800 grid grid-cols-5 py-2 px-1 text-xs items-center shadow-lg">
             <button
               onClick={() => setActiveTab('home')}
@@ -803,7 +805,7 @@
                   setEditingTx(null);
                   setTxModalOpen(true);
                 }}
-                className="w-18 h-18 rounded-full bg-latte-600 hover:bg-latte-700 active:bg-latte-800 text-white font-bold text-base shadow-xl flex items-center justify-center -mt-7 border-4 border-latte-50 dark:border-neutral-900 transition transform active:scale-95"
+                className="w-16 h-16 rounded-full bg-latte-600 hover:bg-latte-700 active:bg-latte-800 text-white font-bold text-base shadow-xl flex items-center justify-center -mt-6 border-4 border-latte-50 dark:border-neutral-900 transition transform active:scale-95"
                 title="記帳"
               >
                 記帳
@@ -843,8 +845,130 @@
       );
     }
 
+    // ==================== 可左滑顯示操作按鈕的交易項目組件 ====================
+    function SwipeableTransactionItem({ tx, currencySymbol, activeLedger, onEditClick, onDeleteClick }) {
+      const [swipeOffset, setSwipeOffset] = useState(0);
+      const touchStartX = useRef(0);
+      const isDragging = useRef(false);
+
+      function handleTouchStart(e) {
+        touchStartX.current = e.touches[0].clientX;
+        isDragging.current = true;
+      }
+
+      function handleTouchMove(e) {
+        if (!isDragging.current) return;
+        const currentX = e.touches[0].clientX;
+        const diff = currentX - touchStartX.current;
+        // 僅允許向左滑動最多 -130px
+        if (diff < 0) {
+          setSwipeOffset(Math.max(diff, -130));
+        } else {
+          setSwipeOffset(0);
+        }
+      }
+
+      function handleTouchEnd() {
+        isDragging.current = false;
+        if (swipeOffset < -65) {
+          setSwipeOffset(-130); // 完整打開按鈕
+        } else {
+          setSwipeOffset(0); // 歸位
+        }
+      }
+
+      // 滑鼠支援 (方便電腦測試)
+      function handleMouseDown(e) {
+        touchStartX.current = e.clientX;
+        isDragging.current = true;
+      }
+
+      function handleMouseMove(e) {
+        if (!isDragging.current) return;
+        const diff = e.clientX - touchStartX.current;
+        if (diff < 0) {
+          setSwipeOffset(Math.max(diff, -130));
+        } else {
+          setSwipeOffset(0);
+        }
+      }
+
+      function handleMouseUp() {
+        if (!isDragging.current) return;
+        isDragging.current = false;
+        if (swipeOffset < -65) {
+          setSwipeOffset(-130);
+        } else {
+          setSwipeOffset(0);
+        }
+      }
+
+      return (
+        <div className="relative overflow-hidden border-b border-latte-100 dark:border-neutral-700/60 last:border-b-0">
+          {/* 背景隱藏按鈕區 */}
+          <div className="absolute inset-y-0 right-0 flex items-center bg-latte-100 dark:bg-neutral-800 z-0">
+            <button
+              type="button"
+              onClick={() => { setSwipeOffset(0); onEditClick(tx); }}
+              className="h-full px-4 bg-latte-600 hover:bg-latte-700 text-white text-xs font-semibold flex items-center justify-center transition"
+            >
+              編輯
+            </button>
+            <button
+              type="button"
+              onClick={() => { setSwipeOffset(0); onDeleteClick(tx); }}
+              className="h-full px-4 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold flex items-center justify-center transition"
+            >
+              刪除
+            </button>
+          </div>
+
+          {/* 前景卡片本體 (可左右拖曳滑動) */}
+          <div
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            style={{ transform: `translateX(${swipeOffset}px)` }}
+            className="relative z-10 bg-white dark:bg-neutral-800 px-5 py-4 flex items-center justify-between gap-3 transition-transform duration-200 select-none cursor-grab active:cursor-grabbing"
+          >
+            <div className="space-y-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-semibold text-xs sm:text-sm text-latte-900 dark:text-white truncate">
+                  {tx.emoji || '📝'} {tx.sub_category} {tx.item_name ? `- ${tx.item_name}` : ''}
+                </span>
+                <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-latte-100 dark:bg-neutral-700 text-latte-700 dark:text-latte-300">
+                  {tx.major_category}
+                </span>
+                {activeLedger?.type === 'couple' && (
+                  <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300">
+                    {tx.payer_nickname}
+                  </span>
+                )}
+              </div>
+              <div className="text-[11px] sm:text-xs text-latte-500 dark:text-neutral-400 flex gap-2.5 flex-wrap">
+                <span>{tx.date}</span>
+                <span>{tx.payment_method}</span>
+                {tx.note && <span className="truncate">備註：{tx.note}</span>}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 shrink-0">
+              <span className={`font-bold text-sm sm:text-base ${tx.type === 'income' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                {tx.type === 'income' ? `+${currencySymbol}${Number(tx.amount).toLocaleString()}` : `-${currencySymbol}${Number(tx.amount).toLocaleString()}`}
+              </span>
+              <span className="text-xs text-latte-400 dark:text-neutral-500 hidden sm:inline-block">← ⬅️ 左右滑動</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     // ==================== 首頁視圖 ====================
-    function HomeView({ activeLedger, currencySymbol, selectedMonth, setSelectedMonth, customDateRange, setCustomDateRange, summary, transactions, onAddClick, onEditClick, onDeleteClick }) {
+    function HomeView({ activeLedger, currencySymbol, selectedMonth, setSelectedMonth, customDateRange, setCustomDateRange, summary, transactions, categories, onAddClick, onEditClick, onDeleteClick }) {
       const [showCustom, setShowCustom] = useState(false);
 
       return (
@@ -897,68 +1021,54 @@
             </div>
           )}
 
-          {/* 月度財務摘要：縮小並排顯示 */}
-          <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
-            <div className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-neutral-800 border border-latte-200/80 dark:border-neutral-700 shadow-2xs text-center">
-              <div className="text-[11px] font-medium text-latte-500 dark:text-neutral-400">本月結餘</div>
-              <div className={`text-sm sm:text-base font-bold mt-1 tracking-tight ${summary.balance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+          {/* 月度財務摘要：本月收入與本月支出並排，本月結餘顯示在下方 */}
+          <div className="space-y-2.5">
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+              <div className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-neutral-800 border border-latte-200/80 dark:border-neutral-700 shadow-2xs text-center">
+                <div className="text-[11px] font-medium text-latte-500 dark:text-neutral-400">本月收入</div>
+                <div className="text-sm sm:text-base font-bold mt-1 text-emerald-600 dark:text-emerald-400 tracking-tight">
+                  +{currencySymbol}{summary.income.toLocaleString()}
+                </div>
+              </div>
+              <div className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-neutral-800 border border-latte-200/80 dark:border-neutral-700 shadow-2xs text-center">
+                <div className="text-[11px] font-medium text-latte-500 dark:text-neutral-400">本月支出</div>
+                <div className="text-sm sm:text-base font-bold mt-1 text-rose-600 dark:text-rose-400 tracking-tight">
+                  -{currencySymbol}{summary.expense.toLocaleString()}
+                </div>
+              </div>
+            </div>
+
+            <div className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-neutral-800 border border-latte-200/80 dark:border-neutral-700 shadow-2xs text-center flex items-center justify-center gap-3">
+              <span className="text-xs font-medium text-latte-500 dark:text-neutral-400">本月結餘：</span>
+              <span className={`text-sm sm:text-base font-bold tracking-tight ${summary.balance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                 {summary.balance >= 0 ? `+${currencySymbol}${summary.balance.toLocaleString()}` : `-${currencySymbol}${Math.abs(summary.balance).toLocaleString()}`}
-              </div>
-            </div>
-            <div className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-neutral-800 border border-latte-200/80 dark:border-neutral-700 shadow-2xs text-center">
-              <div className="text-[11px] font-medium text-latte-500 dark:text-neutral-400">本月收入</div>
-              <div className="text-sm sm:text-base font-bold mt-1 text-emerald-600 dark:text-emerald-400 tracking-tight">
-                +{currencySymbol}{summary.income.toLocaleString()}
-              </div>
-            </div>
-            <div className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-neutral-800 border border-latte-200/80 dark:border-neutral-700 shadow-2xs text-center">
-              <div className="text-[11px] font-medium text-latte-500 dark:text-neutral-400">本月支出</div>
-              <div className="text-sm sm:text-base font-bold mt-1 text-rose-600 dark:text-rose-400 tracking-tight">
-                -{currencySymbol}{summary.expense.toLocaleString()}
-              </div>
+              </span>
             </div>
           </div>
 
           <div className="bg-white dark:bg-neutral-800 rounded-2xl border border-latte-200/80 dark:border-neutral-700 overflow-hidden shadow-2xs">
             <div className="px-5 py-3.5 border-b border-latte-100 dark:border-neutral-700/80 font-semibold text-xs sm:text-sm">
-              <span>收支明細（共 {transactions.length} 筆）</span>
+              <span>收支明細（共 {transactions.length} 筆 • 可向左滑動明細顯示操作按鈕）</span>
             </div>
             {transactions.length === 0 ? (
               <div className="p-8 text-center text-xs sm:text-sm text-latte-500 dark:text-neutral-400">此期間尚無收支紀錄</div>
             ) : (
-              <div className="divide-y divide-latte-100 dark:divide-neutral-700/60">
-                {transactions.map((tx) => (
-                  <div key={tx.id} className="px-5 py-4 flex items-center justify-between gap-3 hover:bg-latte-50/60 dark:hover:bg-neutral-700/30 transition">
-                    <div className="space-y-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-xs sm:text-sm text-latte-900 dark:text-white truncate">
-                          {tx.item_name || tx.sub_category}
-                        </span>
-                        <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-latte-100 dark:bg-neutral-700 text-latte-700 dark:text-latte-300">
-                          {tx.major_category} · {tx.sub_category}
-                        </span>
-                        {activeLedger?.type === 'couple' && (
-                          <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300">
-                            {tx.payer_nickname}
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-[11px] sm:text-xs text-latte-500 dark:text-neutral-400 flex gap-2.5 flex-wrap">
-                        <span>{tx.date}</span>
-                        <span>{tx.payment_method}</span>
-                        {tx.note && <span className="truncate">備註：{tx.note}</span>}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2.5 shrink-0">
-                      <span className={`font-bold text-sm sm:text-base ${tx.type === 'income' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                        {tx.type === 'income' ? `+${currencySymbol}${Number(tx.amount).toLocaleString()}` : `-${currencySymbol}${Number(tx.amount).toLocaleString()}`}
-                      </span>
-                      <button onClick={() => onEditClick(tx)} className="text-xs text-latte-600 dark:text-neutral-300 hover:underline px-1">編輯</button>
-                      <button onClick={() => onDeleteClick(tx)} className="text-xs text-rose-600 hover:underline px-1">刪除</button>
-                    </div>
-                  </div>
-                ))}
+              <div>
+                {transactions.map((tx) => {
+                  // 尋找對應分類的 emoji
+                  const foundCat = categories.find((c) => c.major === tx.major_category && c.sub === tx.sub_category);
+                  const txWithEmoji = { ...tx, emoji: foundCat?.emoji || '📝' };
+                  return (
+                    <SwipeableTransactionItem
+                      key={tx.id}
+                      tx={txWithEmoji}
+                      currencySymbol={currencySymbol}
+                      activeLedger={activeLedger}
+                      onEditClick={onEditClick}
+                      onDeleteClick={onDeleteClick}
+                    />
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1227,7 +1337,9 @@
             <div className="flex justify-between"><span>本月支出總額：</span><span className="font-bold text-rose-600">-{currencySymbol}{stats.expenseTotal.toLocaleString()}</span></div>
             <div className="flex justify-between border-t border-latte-100 dark:border-neutral-700 pt-2">
               <span>本月結餘：</span>
-              <span className="font-bold">{stats.balance >= 0 ? `+${currencySymbol}${stats.balance.toLocaleString()}` : `-${currencySymbol}${Math.abs(stats.balance).toLocaleString()}`}</span>
+              <span className={`font-bold ${stats.balance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                {stats.balance >= 0 ? `+${currencySymbol}${stats.balance.toLocaleString()}` : `-${currencySymbol}${Math.abs(stats.balance).toLocaleString()}`}
+              </span>
             </div>
           </div>
 
@@ -1474,6 +1586,7 @@
       const [catType, setCatType] = useState('expense');
       const [catMajor, setCatMajor] = useState('');
       const [catSub, setCatSub] = useState('');
+      const [catEmoji, setCatEmoji] = useState('🍔');
       const [newPmName, setNewPmName] = useState('');
 
       useEffect(() => {
@@ -1543,6 +1656,7 @@
                 type: cat.type,
                 major: cat.major,
                 sub,
+                emoji: cat.emoji || '📝',
                 is_archived: false,
               });
             });
@@ -1711,6 +1825,7 @@
             type: catType,
             major: catMajor.trim(),
             sub: catSub.trim(),
+            emoji: catEmoji.trim() || '📝',
             is_archived: false,
           });
           setCatSub('');
@@ -1890,7 +2005,7 @@
           </div>
 
           <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-4">
-            <h3 className="font-bold text-base">自訂收支分類（目前帳本）</h3>
+            <h3 className="font-bold text-base">自訂收支分類與 Emoji 圖示（目前帳本）</h3>
             <form onSubmit={addCategory} className="flex flex-wrap gap-2">
               <select
                 value={catType}
@@ -1902,24 +2017,31 @@
               </select>
               <input
                 type="text"
+                placeholder="Emoji (例: 🍔)"
+                value={catEmoji}
+                onChange={(e) => setCatEmoji(e.target.value)}
+                className="w-18 p-2.5 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600 text-center text-xs"
+              />
+              <input
+                type="text"
                 placeholder="大分類名稱"
                 value={catMajor}
                 onChange={(e) => setCatMajor(e.target.value)}
-                className="flex-1 min-w-[110px] p-2.5 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600 text-xs"
+                className="flex-1 min-w-[90px] p-2.5 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600 text-xs"
               />
               <input
                 type="text"
                 placeholder="子分類名稱"
                 value={catSub}
                 onChange={(e) => setCatSub(e.target.value)}
-                className="flex-1 min-w-[110px] p-2.5 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600 text-xs"
+                className="flex-1 min-w-[90px] p-2.5 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600 text-xs"
               />
               <button type="submit" className="px-4 py-2.5 rounded-xl bg-latte-600 text-white font-semibold text-xs">新增分類</button>
             </form>
             <div className="flex flex-wrap gap-2 pt-2">
               {categories.map((c) => (
-                <div key={c.id} className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs border ${c.is_archived ? 'bg-neutral-100 dark:bg-neutral-700 opacity-50' : 'bg-latte-50 dark:bg-neutral-700/50'}`}>
-                  <span>{c.type === 'income' ? '收' : '支'} | {c.major} / {c.sub}</span>
+                <div key={c.id} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs border ${c.is_archived ? 'bg-neutral-100 dark:bg-neutral-700 opacity-50' : 'bg-latte-50 dark:bg-neutral-700/50'}`}>
+                  <span>{c.emoji || '📝'} {c.type === 'income' ? '收' : '支'} | {c.major} / {c.sub}</span>
                   <button type="button" onClick={() => toggleArchiveCategory(c)} className="text-rose-500 hover:font-bold ml-1">×</button>
                 </div>
               ))}
