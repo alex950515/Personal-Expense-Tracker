@@ -2296,7 +2296,7 @@
       ];
 
       return (
-        <div className="min-h-screen flex flex-col md:flex-row pb-36 md:pb-0">
+        <div className="min-h-screen flex flex-col md:flex-row pb-28 md:pb-0">
           {toastMsg && (
             <div className="fixed top-4 left-1/2 -translate-x-1/2 sm:left-auto sm:translate-x-0 sm:right-4 z-[999] px-5 py-3 rounded-2xl bg-latte-800 text-white text-sm font-semibold shadow-2xl border border-latte-600/50 pointer-events-none">
               {toastMsg}
@@ -2474,24 +2474,35 @@
             )}
           </main>
 
-          {/* 手機版底部加高兩倍的導覽列與超大型橫向橢圓「+ 記帳」按鈕 */}
-          <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md border-t border-latte-200/80 dark:border-neutral-800 h-28 px-2 flex items-center justify-between shadow-xl">
+          {/* 手機版底部適度調降高度的導覽列與精緻 SVG 功能圖示 */}
+          <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md border-t border-latte-200/80 dark:border-neutral-800 h-20 px-2 flex items-center justify-between shadow-xl">
             <button
               type="button"
               onClick={() => setActiveTab('home')}
-              className={`flex-1 h-full flex flex-col items-center justify-center font-medium transition touch-manipulation ${activeTab === 'home' ? 'text-latte-700 dark:text-latte-200 font-bold' : 'text-neutral-400 dark:text-neutral-500'}`}
+              title="首頁"
+              aria-label="首頁"
+              className={`flex-1 h-full flex items-center justify-center transition touch-manipulation ${activeTab === 'home' ? 'text-latte-700 dark:text-latte-200' : 'text-neutral-400 dark:text-neutral-500 hover:text-latte-600'}`}
             >
-              <span className="text-base">首頁</span>
+              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={activeTab === 'home' ? 2.4 : 1.9} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 10.5L12 3l9 7.5" />
+                <path d="M5 9.5V19a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9.5" />
+                <path d="M9 21v-6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v6" />
+              </svg>
             </button>
             <button
               type="button"
               onClick={() => setActiveTab('stats')}
-              className={`flex-1 h-full flex flex-col items-center justify-center font-medium transition touch-manipulation ${activeTab === 'stats' ? 'text-latte-700 dark:text-latte-200 font-bold' : 'text-neutral-400 dark:text-neutral-500'}`}
+              title="統計"
+              aria-label="統計"
+              className={`flex-1 h-full flex items-center justify-center transition touch-manipulation ${activeTab === 'stats' ? 'text-latte-700 dark:text-latte-200' : 'text-neutral-400 dark:text-neutral-500 hover:text-latte-600'}`}
             >
-              <span className="text-base">統計</span>
+              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={activeTab === 'stats' ? 2.4 : 1.9} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
+                <path d="M22 12A10 10 0 0 0 12 2v10z" />
+              </svg>
             </button>
             
-            {/* 置中橫向橢圓「+ 記帳」大按鈕，不換行且極佳觸控手感 */}
+            {/* 置中橫向橢圓「+ 記帳」按鈕 */}
             <div className="px-2 flex items-center justify-center shrink-0">
               <button
                 type="button"
@@ -2503,7 +2514,7 @@
                   setEditingTx(null);
                   setTxModalOpen(true);
                 }}
-                className="h-16 px-7 rounded-full bg-latte-600 hover:bg-latte-700 active:bg-latte-800 text-white font-bold text-lg shadow-xl flex items-center justify-center whitespace-nowrap border-4 border-latte-50 dark:border-neutral-900 transition transform active:scale-95 touch-manipulation"
+                className="h-13 py-3 px-6 rounded-full bg-latte-600 hover:bg-latte-700 active:bg-latte-800 text-white font-bold text-base shadow-lg flex items-center justify-center whitespace-nowrap border-4 border-latte-50 dark:border-neutral-900 transition transform active:scale-95 touch-manipulation"
                 title="記帳"
               >
                 + 記帳
@@ -2513,18 +2524,28 @@
             <button
               type="button"
               onClick={() => setActiveTab('budgets')}
-              className={`flex-1 h-full flex flex-col items-center justify-center font-medium transition touch-manipulation ${activeTab === 'budgets' ? 'text-latte-700 dark:text-latte-200 font-bold' : 'text-neutral-400 dark:text-neutral-500'}`}
+              title="預算"
+              aria-label="預算"
+              className={`flex-1 h-full flex items-center justify-center transition touch-manipulation ${activeTab === 'budgets' ? 'text-latte-700 dark:text-latte-200' : 'text-neutral-400 dark:text-neutral-500 hover:text-latte-600'}`}
             >
-              <span className="text-base">預算</span>
+              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={activeTab === 'budgets' ? 2.4 : 1.9} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1" />
+                <path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4" />
+              </svg>
             </button>
             <button
               type="button"
               onClick={() => setActiveTab('settings')}
-              className={`flex-1 h-full flex flex-col items-center justify-center font-medium relative transition touch-manipulation ${activeTab === 'settings' ? 'text-latte-700 dark:text-latte-200 font-bold' : 'text-neutral-400 dark:text-neutral-500'}`}
+              title="設定"
+              aria-label="設定"
+              className={`flex-1 h-full flex items-center justify-center relative transition touch-manipulation ${activeTab === 'settings' ? 'text-latte-700 dark:text-latte-200' : 'text-neutral-400 dark:text-neutral-500 hover:text-latte-600'}`}
             >
-              <span className="text-base">設定</span>
+              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={activeTab === 'settings' ? 2.4 : 1.9} strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
               {invitations.length > 0 && (
-                <span className="absolute top-6 right-4 w-2.5 h-2.5 rounded-full bg-red-500"></span>
+                <span className="absolute top-4 right-5 w-2.5 h-2.5 rounded-full bg-red-500"></span>
               )}
             </button>
           </nav>
