@@ -622,7 +622,7 @@
           <aside className="hidden md:flex md:w-68 md:flex-col bg-latte-100/80 dark:bg-neutral-800/90 border-r border-latte-200/80 dark:border-neutral-700/80 p-5 justify-between shrink-0 shadow-xs">
             <div className="space-y-5">
               <div>
-                <div className="text-[11px] font-medium text-latte-500 dark:text-neutral-400 mb-1.5 uppercase tracking-wider">目前使用帳本</div>
+                <div className="text-[11px] font-medium text-latte-500 dark:text-neutral-400 mb-1.5 uppercase tracking-wider px-1">目前使用帳本</div>
                 <select
                   value={activeLedgerId}
                   onChange={(e) => setActiveLedgerId(e.target.value)}
@@ -636,12 +636,12 @@
                 </select>
               </div>
 
-              <nav className="space-y-1.5">
+              <nav className="space-y-1.5 px-1">
                 {navItems.map((item) => (
                   <button
                     key={item.id}
                     onClick={() => setActiveTab(item.id)}
-                    className={`w-full text-left px-4.5 py-3.5 rounded-2xl font-semibold text-sm transition flex items-center justify-between ${
+                    className={`w-full text-left px-5 py-3.5 rounded-2xl font-semibold text-sm transition flex items-center justify-between ${
                       activeTab === item.id
                         ? 'bg-latte-600 text-white shadow-xs'
                         : 'text-latte-800 dark:text-neutral-200 hover:bg-latte-200/50 dark:hover:bg-neutral-700/60'
