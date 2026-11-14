@@ -783,8 +783,8 @@
             )}
           </main>
 
-          {/* 手機版底部導覽列 */}
-          <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md border-t border-latte-200/80 dark:border-neutral-800 grid grid-cols-5 py-2 px-1 text-xs items-center shadow-lg">
+            {/* 手機版底部導覽列 */}
+            <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md border-t border-latte-200/80 dark:border-neutral-800 grid grid-cols-5 py-2 px-1 text-xs items-center shadow-lg">
             <button
               onClick={() => setActiveTab('home')}
               className={`flex flex-col items-center justify-center py-1 font-medium transition ${activeTab === 'home' ? 'text-latte-700 dark:text-latte-200 font-bold' : 'text-neutral-400 dark:text-neutral-500'}`}
@@ -1107,7 +1107,6 @@
       const [paymentMethod, setPaymentMethod] = useState(editingTx?.payment_method || '');
       const [saving, setSaving] = useState(false);
 
-      // 日期與付款方式彈出選擇視窗狀態
       const [dateModalOpen, setDateModalOpen] = useState(false);
       const [pmModalOpen, setPmModalOpen] = useState(false);
 
@@ -1134,9 +1133,7 @@
             if (!isNaN(result) && isFinite(result)) {
               setAmountStr(String(Number(result.toFixed(2))));
             }
-          } catch (e) {
-            // ignore
-          }
+          } catch (e) {}
           return;
         }
         if (['+', '-', '×', '÷'].includes(val)) {
@@ -1225,32 +1222,31 @@
 
       return (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="bg-white dark:bg-neutral-900 rounded-t-3xl sm:rounded-3xl max-w-lg w-full p-4 sm:p-6 space-y-4 shadow-2xl max-h-[96vh] overflow-y-auto">
+          <div className="bg-white dark:bg-neutral-900 rounded-t-3xl sm:rounded-3xl max-w-lg w-full p-4 sm:p-6 space-y-3.5 shadow-2xl max-h-[96vh] overflow-y-auto">
             
-            {/* 頂部：關閉按鈕 */}
             <div className="flex justify-end items-center pb-1">
               <button type="button" onClick={onClose} className="p-1.5 rounded-full text-neutral-400 hover:bg-latte-100 dark:hover:bg-neutral-800 shrink-0">✕</button>
             </div>
 
-            {/* 分類選擇區塊 */}
-            <div className="bg-latte-50 dark:bg-neutral-800/50 p-3.5 rounded-2xl space-y-3">
+            {/* 固定為兩行高度的分類選擇區塊，支援橫向滾輪滑動查看更多分類 */}
+            <div className="bg-latte-50 dark:bg-neutral-800/50 p-3 rounded-2xl space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-latte-600 dark:text-neutral-400">選擇記帳分類</span>
                 {selectedSubCat && (
-                  <span className="text-xs font-bold text-latte-900 dark:text-white bg-white dark:bg-neutral-700 px-3 py-1 rounded-full shadow-2xs border border-latte-200 dark:border-neutral-600">
+                  <span className="text-xs font-bold text-latte-900 dark:text-white bg-white dark:bg-neutral-700 px-3 py-0.5 rounded-full shadow-2xs border border-latte-200 dark:border-neutral-600">
                     已選：{selectedSubCat.emoji} {selectedSubCat.major} - {selectedSubCat.sub}
                   </span>
                 )}
               </div>
 
-              {/* 大分類按鈕列 */}
-              <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+              {/* 第一行：大分類滾動列 */}
+              <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar shrink-0">
                 {majors.map((m) => (
                   <button
                     key={m}
                     type="button"
                     onClick={() => setSelectedMajor(m)}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition ${
+                    className={`px-3 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition ${
                       selectedMajor === m
                         ? 'bg-latte-800 text-white shadow-2xs dark:bg-neutral-100 dark:text-neutral-900'
                         : 'bg-white dark:bg-neutral-700 text-latte-700 dark:text-neutral-300 border border-latte-200 dark:border-neutral-600'
@@ -1261,8 +1257,8 @@
                 ))}
               </div>
 
-              {/* 子分類卡片按鈕網格 */}
-              <div className="grid grid-cols-4 gap-2 max-h-40 overflow-y-auto">
+              {/* 第二行：子分類滾動網格（固定兩行檢視高度，橫向滾輪滑動） */}
+              <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
                 {currentMajorSubs.map((c) => {
                   const isSelected = selectedSubCat?.major === c.major && selectedSubCat?.sub === c.sub;
                   return (
@@ -1270,21 +1266,20 @@
                       key={c.id || c.sub}
                       type="button"
                       onClick={() => setSelectedSubCat({ major: c.major, sub: c.sub, emoji: c.emoji || '📝' })}
-                      className={`flex flex-col items-center justify-center p-2.5 rounded-xl border transition ${
+                      className={`flex flex-col items-center justify-center p-2 rounded-xl border transition min-w-[70px] shrink-0 ${
                         isSelected
                           ? 'border-latte-600 bg-white dark:bg-neutral-700 ring-2 ring-latte-600/30 font-bold'
                           : 'border-latte-200 dark:border-neutral-700 bg-white/70 dark:bg-neutral-800 hover:bg-white'
                       }`}
                     >
-                      <span className="text-xl mb-0.5">{c.emoji || '📝'}</span>
-                      <span className="text-[11px] text-latte-800 dark:text-neutral-200 truncate w-full text-center">{c.sub}</span>
+                      <span className="text-lg mb-0.5">{c.emoji || '📝'}</span>
+                      <span className="text-[10px] text-latte-800 dark:text-neutral-200 truncate w-full text-center">{c.sub}</span>
                     </button>
                   );
                 })}
               </div>
             </div>
 
-            {/* 項目名稱備註輸入框 (移至金額上方) */}
             <div>
               <input
                 type="text"
@@ -1295,7 +1290,6 @@
               />
             </div>
 
-            {/* 金額顯示 (數字靠左) 與 支出/收入選擇鈕 (右側) */}
             <div className="flex items-center justify-between bg-latte-100 dark:bg-neutral-800 px-4 py-3 rounded-2xl gap-3">
               <div className="text-xl sm:text-2xl font-bold text-latte-900 dark:text-white tracking-tight text-left truncate">
                 NT$ {amountStr}
@@ -1326,20 +1320,16 @@
               </div>
             </div>
 
-            {/* 4x4 鍵盤區塊 (右側為付款方式、日期、確定) */}
             <div className="space-y-3">
               <div className="grid grid-cols-4 gap-2">
-                {/* 第一列 */}
                 <button type="button" onClick={() => handleKeyPress('1')} className="py-3 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-100 font-bold text-base shadow-2xs">1</button>
                 <button type="button" onClick={() => handleKeyPress('2')} className="py-3 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-100 font-bold text-base shadow-2xs">2</button>
                 <button type="button" onClick={() => handleKeyPress('3')} className="py-3 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-100 font-bold text-base shadow-2xs">3</button>
                 <button type="button" onClick={() => handleKeyPress('backspace')} className="py-3 rounded-xl bg-latte-200 dark:bg-neutral-700 hover:bg-latte-300 font-bold text-xs text-latte-700 dark:text-neutral-200 flex items-center justify-center">⌫</button>
 
-                {/* 第二列 */}
                 <button type="button" onClick={() => handleKeyPress('4')} className="py-3 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-100 font-bold text-base shadow-2xs">4</button>
                 <button type="button" onClick={() => handleKeyPress('5')} className="py-3 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-100 font-bold text-base shadow-2xs">5</button>
                 <button type="button" onClick={() => handleKeyPress('6')} className="py-3 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-100 font-bold text-base shadow-2xs">6</button>
-                {/* 右側上方：付款方式 (彈出視窗) */}
                 <button
                   type="button"
                   onClick={() => setPmModalOpen(true)}
@@ -1349,11 +1339,9 @@
                   <span className="truncate w-full">{paymentMethod || '現金'}</span>
                 </button>
 
-                {/* 第三列 */}
                 <button type="button" onClick={() => handleKeyPress('7')} className="py-3 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-100 font-bold text-base shadow-2xs">7</button>
                 <button type="button" onClick={() => handleKeyPress('8')} className="py-3 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-100 font-bold text-base shadow-2xs">8</button>
                 <button type="button" onClick={() => handleKeyPress('9')} className="py-3 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-100 font-bold text-base shadow-2xs">9</button>
-                {/* 右側中間：日期選擇 (預設今日) */}
                 <button
                   type="button"
                   onClick={() => setDateModalOpen(true)}
@@ -1363,11 +1351,9 @@
                   <span className="truncate w-full">{date === getTodayStr() ? '今日' : date.slice(5)}</span>
                 </button>
 
-                {/* 第四列 */}
                 <button type="button" onClick={() => handleKeyPress('.')} className="py-3 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-100 font-bold text-base shadow-2xs">.</button>
                 <button type="button" onClick={() => handleKeyPress('0')} className="py-3 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-100 font-bold text-base shadow-2xs">0</button>
                 <button type="button" onClick={() => handleKeyPress('00')} className="py-3 rounded-xl bg-latte-50 dark:bg-neutral-800 hover:bg-latte-100 font-bold text-base shadow-2xs">00</button>
-                {/* 右側下方：確定按鈕 */}
                 <button
                   type="button"
                   disabled={saving}
@@ -1379,7 +1365,6 @@
               </div>
             </div>
 
-            {/* 付款方式彈出視窗 */}
             {pmModalOpen && (
               <div className="fixed inset-0 z-60 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
                 <div className="bg-white dark:bg-neutral-800 rounded-2xl max-w-xs w-full p-5 shadow-xl border border-latte-200 dark:border-neutral-700 space-y-3">
@@ -1401,7 +1386,6 @@
               </div>
             )}
 
-            {/* 日期選擇彈出視窗 */}
             {dateModalOpen && (
               <div className="fixed inset-0 z-60 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
                 <div className="bg-white dark:bg-neutral-800 rounded-2xl max-w-xs w-full p-5 shadow-xl border border-latte-200 dark:border-neutral-700 space-y-3">
