@@ -57,13 +57,71 @@
   <script type="text/babel">
     const { useState, useEffect, useMemo, useRef } = React;
 
+    // 依附檔圖片設定所有帳本的初始預設分類與專屬圖示
     const DEFAULT_CATEGORIES = [
-      { type: 'expense', emoji: '🍔', major: '吃喝', subs: ['早餐', '午餐', '晚餐', '飲料', '點心', '宵夜'] },
-      { type: 'expense', emoji: '🚗', major: '交通', subs: ['大眾運輸', '計程車', '加油', '停車', '其他交通'] },
-      { type: 'expense', emoji: '🎉', major: '娛樂', subs: ['電影', '遊戲', '休閒活動'] },
-      { type: 'expense', emoji: '🛍️', major: '購物', subs: ['服飾', '生活用品', '電子產品'] },
-      { type: 'income', emoji: '💰', major: '工作收入', subs: ['薪水', '兼職', '獎金'] },
-      { type: 'income', emoji: '🧧', major: '其他收入', subs: ['獎學金', '紅包', '利息', '其他收入'] },
+      {
+        type: 'expense',
+        emoji: '🥪',
+        major: '吃吃喝喝',
+        subs: [
+          { name: '早餐', emoji: '🥪' },
+          { name: '午餐', emoji: '🍱' },
+          { name: '晚餐', emoji: '🍜' },
+          { name: '飲料', emoji: '🧋' },
+          { name: '火鍋', emoji: '🥘' },
+          { name: '宵夜/點心', emoji: '🌃' },
+          { name: '其他', emoji: '🍽️' },
+        ],
+      },
+      {
+        type: 'expense',
+        emoji: '🥬',
+        major: '購物',
+        subs: [
+          { name: '生鮮食材', emoji: '🥬' },
+        ],
+      },
+      {
+        type: 'expense',
+        emoji: '💳',
+        major: '生活',
+        subs: [
+          { name: '悠遊卡', emoji: '💳' },
+          { name: '影印', emoji: '🖨️' },
+        ],
+      },
+      {
+        type: 'expense',
+        emoji: '🛵',
+        major: '交通',
+        subs: [
+          { name: '機油', emoji: '🛵' },
+        ],
+      },
+      {
+        type: 'expense',
+        emoji: '🕹️',
+        major: '娛樂',
+        subs: [
+          { name: '夾娃娃機', emoji: '🕹️' },
+        ],
+      },
+      {
+        type: 'income',
+        emoji: '💵',
+        major: '提款ATM',
+        subs: [
+          { name: '郵局', emoji: '💵' },
+        ],
+      },
+      {
+        type: 'income',
+        emoji: '💰',
+        major: '收入',
+        subs: [
+          { name: '其他', emoji: '💰' },
+        ],
+      },
     ];
 
     const DEFAULT_PAYMENT_METHODS = ['現金', '信用卡', '銀行轉帳'];
@@ -386,13 +444,15 @@
         if (list.length > 0) return list;
         const fallback = [];
         DEFAULT_CATEGORIES.forEach((cat) => {
-          cat.subs.forEach((sub, idx) => {
+          cat.subs.forEach((subItem, idx) => {
+            const subName = typeof subItem === 'string' ? subItem : subItem.name;
+            const subEmoji = typeof subItem === 'string' ? cat.emoji : (subItem.emoji || cat.emoji);
             fallback.push({
               id: `default_${cat.type}_${cat.major}_${idx}`,
               type: cat.type,
-              emoji: cat.emoji,
+              emoji: subEmoji,
               major: cat.major,
-              sub,
+              sub: subName,
             });
           });
         });
@@ -1266,34 +1326,36 @@
           map[`${c.type}::${c.major}::${c.sub}`] = c.emoji || '📝';
         });
         DEFAULT_CATEGORIES.forEach((cat) => {
-          cat.subs.forEach((sub) => {
-            const key = `${cat.type}::${cat.major}::${sub}`;
-            if (!map[key]) map[key] = cat.emoji;
+          cat.subs.forEach((subItem) => {
+            const subName = typeof subItem === 'string' ? subItem : subItem.name;
+            const subEmoji = typeof subItem === 'string' ? cat.emoji : (subItem.emoji || cat.emoji);
+            const key = `${cat.type}::${cat.major}::${subName}`;
+            if (!map[key]) map[key] = subEmoji;
           });
         });
         return map;
       }, [categories]);
 
-      // 依日期分組收支明細，並計算每日小計與星期（同一天內收入固定排在支出前面）
       const groupedTransactions = useMemo(() => {
-        const groups = {};
         const weekDays = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
-        (transactions || []).forEach((tx) => {
+        const groups = {};
+        transactions.forEach((tx) => {
           const d = tx.date || '未知日期';
           if (!groups[d]) {
             let weekLabel = '';
-            if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
-              const dt = new Date(d + 'T00:00:00');
-              if (!isNaN(dt.getTime())) weekLabel = weekDays[dt.getDay()];
+            const parsedDate = new Date(d + 'T00:00:00');
+            if (!isNaN(parsedDate.getTime())) {
+              weekLabel = weekDays[parsedDate.getDay()];
             }
-            groups[d] = { date: d, weekLabel, items: [], income: 0, expense: 0 };
+            groups[d] = { date: d, weekLabel, income: 0, expense: 0, items: [] };
           }
-          groups[d].items.push(tx);
           const amt = Number(tx.amount) || 0;
           if (tx.type === 'income') groups[d].income += amt;
           else groups[d].expense += amt;
+          groups[d].items.push(tx);
         });
         return Object.values(groups)
+          .sort((a, b) => b.date.localeCompare(a.date))
           .map((group) => ({
             ...group,
             items: [...group.items].sort((a, b) => {
@@ -1302,27 +1364,35 @@
               }
               return (b.created_ms || 0) - (a.created_ms || 0);
             }),
-          }))
-          .sort((a, b) => b.date.localeCompare(a.date));
+          }));
       }, [transactions]);
 
       return (
-        <div className="space-y-4">
+        <div className="space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-2.5">
             <div className="flex items-center gap-2">
               <input
                 type="month"
                 value={selectedMonth}
                 onChange={(e) => {
-                  setCustomDateRange({ enabled: false, start: '', end: '' });
                   setSelectedMonth(e.target.value);
+                  setCustomDateRange({ ...customDateRange, enabled: false });
+                  setShowCustom(false);
                 }}
                 className="px-3 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-latte-200 dark:border-neutral-700 text-xs sm:text-sm font-semibold shadow-2xs"
               />
               <button
                 type="button"
-                onClick={() => setShowCustom(!showCustom)}
-                className="px-3 py-2 rounded-xl border border-latte-200 dark:border-neutral-700 text-xs bg-white dark:bg-neutral-800 font-medium"
+                onClick={() => {
+                  const next = !showCustom;
+                  setShowCustom(next);
+                  if (!next) setCustomDateRange({ ...customDateRange, enabled: false });
+                }}
+                className={`px-3 py-2 rounded-xl text-xs font-medium border transition ${
+                  customDateRange.enabled
+                    ? 'bg-latte-600 text-white border-latte-600'
+                    : 'bg-white dark:bg-neutral-800 border-latte-200 dark:border-neutral-700 text-latte-700 dark:text-neutral-300'
+                }`}
               >
                 自訂區間
               </button>
@@ -1356,7 +1426,7 @@
             </div>
           )}
 
-          {/* 月度財務摘要：本月收入與支出縮小並排，本月結餘在下方以圓角長條方形卡片顯示 */}
+          {/* 月度財務摘要：本月收入與支出縮小並排，本月結餘在下方搭配收支進度條顯示 */}
           <div className="space-y-2.5">
             <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
               <div className="p-3 sm:p-3.5 rounded-2xl bg-white dark:bg-neutral-800 border border-latte-200/80 dark:border-neutral-700 shadow-2xs">
@@ -1372,12 +1442,53 @@
                 </div>
               </div>
             </div>
-            <div className="px-4 py-3 rounded-2xl bg-white dark:bg-neutral-800 border border-latte-200/80 dark:border-neutral-700 shadow-2xs flex items-center justify-between">
-              <span className="text-xs font-medium text-latte-600 dark:text-neutral-400">本月結餘</span>
-              <span className={`text-sm sm:text-base font-bold tracking-tight ${summary.balance < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                {summary.balance >= 0 ? `+${currencySymbol}${summary.balance.toLocaleString()}` : `-${currencySymbol}${Math.abs(summary.balance).toLocaleString()}`}
-              </span>
-            </div>
+            {(() => {
+              const hasIncome = summary.income > 0;
+              const expenseRatio = hasIncome ? Math.min(Math.round((summary.expense / summary.income) * 100), 100) : (summary.expense > 0 ? 100 : 0);
+              const remainingRatio = hasIncome ? Math.max(100 - expenseRatio, 0) : 0;
+              const isOverBudget = summary.balance < 0;
+              return (
+                <div className="px-4 py-3.5 rounded-2xl bg-white dark:bg-neutral-800 border border-latte-200/80 dark:border-neutral-700 shadow-2xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-latte-600 dark:text-neutral-400">本月結餘</span>
+                      {(summary.income > 0 || summary.expense > 0) && (
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+                          isOverBudget
+                            ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300'
+                            : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                        }`}>
+                          {hasIncome ? `已支出 ${Math.round((summary.expense / summary.income) * 100)}%` : '尚無收入'}
+                        </span>
+                      )}
+                    </div>
+                    <span className={`text-sm sm:text-base font-bold tracking-tight ${isOverBudget ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                      {summary.balance >= 0 ? `+${currencySymbol}${summary.balance.toLocaleString()}` : `-${currencySymbol}${Math.abs(summary.balance).toLocaleString()}`}
+                    </span>
+                  </div>
+                  <div className="w-full h-2 rounded-full bg-latte-100 dark:bg-neutral-700 overflow-hidden flex">
+                    {summary.income === 0 && summary.expense === 0 ? (
+                      <div className="h-full w-0" />
+                    ) : isOverBudget ? (
+                      <div className="h-full w-full bg-rose-500 transition-all duration-300" />
+                    ) : (
+                      <>
+                        <div
+                          className="h-full bg-emerald-500 transition-all duration-300"
+                          style={{ width: `${remainingRatio}%` }}
+                          title={`結餘佔比 ${remainingRatio}%`}
+                        />
+                        <div
+                          className="h-full bg-rose-400/85 transition-all duration-300"
+                          style={{ width: `${expenseRatio}%` }}
+                          title={`支出佔比 ${expenseRatio}%`}
+                        />
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           <div className="bg-white dark:bg-neutral-800 rounded-2xl border border-latte-200/80 dark:border-neutral-700 overflow-hidden shadow-2xs">
@@ -1688,14 +1799,18 @@
           });
 
           const batch = db.batch();
+          let sortIdx = 0;
           DEFAULT_CATEGORIES.forEach((cat) => {
-            cat.subs.forEach((sub) => {
+            cat.subs.forEach((subItem) => {
+              const subName = typeof subItem === 'string' ? subItem : subItem.name;
+              const subEmoji = typeof subItem === 'string' ? cat.emoji : (subItem.emoji || cat.emoji);
               batch.set(db.collection('categories').doc(), {
                 ledger_id: ledgerRef.id,
                 type: cat.type,
-                emoji: cat.emoji || '📝',
+                emoji: subEmoji || '📝',
                 major: cat.major,
-                sub,
+                sub: subName,
+                sort_order: sortIdx++,
                 is_archived: false,
               });
             });
@@ -2697,15 +2812,19 @@
           });
 
           const batch = db.batch();
+          let sortIdx = 0;
           DEFAULT_CATEGORIES.forEach((cat) => {
-            cat.subs.forEach((sub) => {
+            cat.subs.forEach((subItem) => {
+              const subName = typeof subItem === 'string' ? subItem : subItem.name;
+              const subEmoji = typeof subItem === 'string' ? cat.emoji : (subItem.emoji || cat.emoji);
               const catRef = db.collection('categories').doc();
               batch.set(catRef, {
                 ledger_id: ledgerRef.id,
                 type: cat.type,
-                emoji: cat.emoji || '📝',
+                emoji: subEmoji || '📝',
                 major: cat.major,
-                sub: sub,
+                sub: subName,
+                sort_order: sortIdx++,
                 is_archived: false,
               });
             });
