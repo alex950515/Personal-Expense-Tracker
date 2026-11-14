@@ -2890,7 +2890,7 @@
           )}
 
           {dialog && (
-            <CustomModalDialog dialog={dialog} onClose={handleDialogClose} />
+            <CustomModalDialog dialog={dialog} onClose={(res) => dialog.onClose(res)} />
           )}
 
           <header className="sticky top-0 z-30 bg-white/90 dark:bg-neutral-900/90 backdrop-blur-md border-b border-latte-200 dark:border-neutral-800 px-4 sm:px-8 py-3.5 flex items-center justify-between shadow-xs">
