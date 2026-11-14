@@ -421,6 +421,156 @@
       const [dateModalOpen, setDateModalOpen] = useState(false);
       const [pmModalOpen, setPmModalOpen] = useState(false);
 
+      // 大分類與子分類長按拖曳排序狀態
+      const [orderedMajors, setOrderedMajors] = useState([]);
+      const orderedMajorsRef = useRef([]);
+      const [draggingMajor, setDraggingMajor] = useState(null);
+      const majorPressTimerRef = useRef(null);
+
+      const [orderedSubs, setOrderedSubs] = useState([]);
+      const orderedSubsRef = useRef([]);
+      const [draggingSubId, setDraggingSubId] = useState(null);
+      const subPressTimerRef = useRef(null);
+
+      useEffect(() => {
+        setOrderedMajors(majors);
+        orderedMajorsRef.current = majors;
+      }, [majorsKey]);
+
+      const currentMajorSubsKey = currentMajorSubs.map((c) => `${c.id || c.sub}:${c.sort_order ?? ''}`).join('|');
+      useEffect(() => {
+        setOrderedSubs(currentMajorSubs);
+        orderedSubsRef.current = currentMajorSubs;
+      }, [currentMajorSubsKey]);
+
+      function moveMajorItem(fromIdx, toIdx) {
+        if (fromIdx === toIdx || fromIdx < 0 || toIdx < 0) return;
+        setOrderedMajors((prev) => {
+          const next = [...prev];
+          const [moved] = next.splice(fromIdx, 1);
+          next.splice(toIdx, 0, moved);
+          orderedMajorsRef.current = next;
+          return next;
+        });
+      }
+
+      async function persistMajorOrder(newMajorOrder) {
+        if (!Array.isArray(categories) || categories.length === 0) return;
+        try {
+          const db = firebase.firestore();
+          const batch = db.batch();
+          let orderIdx = 0;
+          newMajorOrder.forEach((m) => {
+            const groupItems = categories.filter((c) => c.type === type && c.major === m);
+            groupItems.forEach((item) => {
+              if (item.id && !String(item.id).startsWith('default_')) {
+                batch.update(db.collection('categories').doc(item.id), { sort_order: orderIdx++ });
+              }
+            });
+          });
+          await batch.commit();
+          showToast('已更新大分類順序');
+        } catch (err) {
+          showToast('更新順序失敗：' + err.message);
+        }
+      }
+
+      function handleMajorPointerDown(m) {
+        if (majorPressTimerRef.current) clearTimeout(majorPressTimerRef.current);
+        majorPressTimerRef.current = setTimeout(() => {
+          setDraggingMajor(m);
+          if (navigator.vibrate) navigator.vibrate(25);
+        }, 280);
+      }
+
+      function handleMajorTouchMove(e) {
+        if (!draggingMajor) return;
+        if (e.cancelable) e.preventDefault();
+        const touch = e.touches[0];
+        const target = document.elementFromPoint(touch.clientX, touch.clientY);
+        const btnEl = target?.closest('[data-major-name]');
+        const overMajor = btnEl?.getAttribute('data-major-name');
+        if (overMajor && overMajor !== draggingMajor) {
+          const fromIdx = orderedMajorsRef.current.indexOf(draggingMajor);
+          const toIdx = orderedMajorsRef.current.indexOf(overMajor);
+          moveMajorItem(fromIdx, toIdx);
+        }
+      }
+
+      function handleMajorPointerUp() {
+        if (majorPressTimerRef.current) {
+          clearTimeout(majorPressTimerRef.current);
+          majorPressTimerRef.current = null;
+        }
+        if (draggingMajor) {
+          setDraggingMajor(null);
+          persistMajorOrder(orderedMajorsRef.current);
+        }
+      }
+
+      function moveSubItem(fromIdx, toIdx) {
+        if (fromIdx === toIdx || fromIdx < 0 || toIdx < 0) return;
+        setOrderedSubs((prev) => {
+          const next = [...prev];
+          const [moved] = next.splice(fromIdx, 1);
+          next.splice(toIdx, 0, moved);
+          orderedSubsRef.current = next;
+          return next;
+        });
+      }
+
+      async function persistSubOrder(newSubList) {
+        if (!Array.isArray(categories) || categories.length === 0) return;
+        try {
+          const db = firebase.firestore();
+          const batch = db.batch();
+          const baseOrders = newSubList.map((c) => Number(c.sort_order) || 0);
+          const minOrder = baseOrders.length > 0 ? Math.min(...baseOrders) : 0;
+          newSubList.forEach((item, idx) => {
+            if (item.id && !String(item.id).startsWith('default_')) {
+              batch.update(db.collection('categories').doc(item.id), { sort_order: minOrder + idx });
+            }
+          });
+          await batch.commit();
+          showToast('已更新子分類順序');
+        } catch (err) {
+          showToast('更新順序失敗：' + err.message);
+        }
+      }
+
+      function handleSubPointerDown(subKey) {
+        if (subPressTimerRef.current) clearTimeout(subPressTimerRef.current);
+        subPressTimerRef.current = setTimeout(() => {
+          setDraggingSubId(subKey);
+          if (navigator.vibrate) navigator.vibrate(25);
+        }, 280);
+      }
+
+      function handleSubTouchMove(e) {
+        if (!draggingSubId) return;
+        if (e.cancelable) e.preventDefault();
+        const touch = e.touches[0];
+        const target = document.elementFromPoint(touch.clientX, touch.clientY);
+        const btnEl = target?.closest('[data-sub-key]');
+        const overKey = btnEl?.getAttribute('data-sub-key');
+        if (overKey && overKey !== draggingSubId) {
+          const fromIdx = orderedSubsRef.current.findIndex((c) => (c.id || c.sub) === draggingSubId);
+          const toIdx = orderedSubsRef.current.findIndex((c) => (c.id || c.sub) === overKey);
+          moveSubItem(fromIdx, toIdx);
+        }
+      }
+
+      function handleSubPointerUp() {
+        if (subPressTimerRef.current) {
+          clearTimeout(subPressTimerRef.current);
+          subPressTimerRef.current = null;
+        }
+        if (draggingSubId) {
+          setDraggingSubId(null);
+          persistSubOrder(orderedSubsRef.current);
+        }
+      }
+
       useEffect(() => {
         if (majors.length > 0 && !majors.includes(selectedMajor)) {
           const nextMajor = majors[0];
@@ -540,43 +690,89 @@
             {/* 類別選擇區塊：大分類改為橫向滾動單排，子分類維持垂直滾動網格 */}
             <div className="bg-latte-50 dark:bg-neutral-800/50 p-2.5 md:p-3.5 rounded-2xl space-y-2 shrink-0 border border-latte-200/60 dark:border-neutral-700/60">
               <div className="flex items-center justify-between px-0.5">
-                <span className="text-xs font-bold text-latte-600 dark:text-neutral-400">選擇記帳分類</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-bold text-latte-600 dark:text-neutral-400">選擇記帳分類</span>
+                  <span className="text-[10px] text-latte-400 dark:text-neutral-500">（長按可調順序）</span>
+                </div>
                 {selectedSubCat && (
-                  <span className="text-xs font-bold text-latte-900 dark:text-white bg-white dark:bg-neutral-700 px-3 py-0.5 rounded-full shadow-2xs border border-latte-200 dark:border-neutral-600 truncate max-w-[210px]">
+                  <span className="text-xs font-bold text-latte-900 dark:text-white bg-white dark:bg-neutral-700 px-3 py-0.5 rounded-full shadow-2xs border border-latte-200 dark:border-neutral-600 truncate max-w-[190px]">
                     已選：{selectedSubCat.emoji} {selectedSubCat.major} - {selectedSubCat.sub}
                   </span>
                 )}
               </div>
 
-              {/* 大分類列表：單排橫向滾動 */}
-              <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 px-0.5">
-                {majors.map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => handleSelectMajor(m)}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap shrink-0 transition ${
-                      selectedMajor === m
-                        ? 'bg-latte-800 text-white shadow-2xs dark:bg-neutral-100 dark:text-neutral-900'
-                        : 'bg-white dark:bg-neutral-700 text-latte-700 dark:text-neutral-300 border border-latte-200 dark:border-neutral-600 hover:bg-latte-100'
-                    }`}
-                  >
-                    {m}
-                  </button>
-                ))}
-              </div>
-
-              {/* 子分類網格：固定高度，支援上下滾動 */}
-              <div className="h-[88px] md:h-[112px] overflow-y-auto no-scrollbar grid grid-cols-3 md:grid-cols-4 content-start gap-2 p-1.5 bg-white/70 dark:bg-neutral-900/40 rounded-xl border border-latte-200/60 dark:border-neutral-700/60">
-                {currentMajorSubs.map((c) => {
-                  const isSelected = selectedSubCat?.major === c.major && selectedSubCat?.sub === c.sub;
+              {/* 大分類列表：單排橫向滾動（支援長按拖曳排序） */}
+              <div
+                onTouchMove={handleMajorTouchMove}
+                onTouchEnd={handleMajorPointerUp}
+                onMouseUp={handleMajorPointerUp}
+                className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 px-0.5 select-none"
+              >
+                {orderedMajors.map((m) => {
+                  const isDragging = draggingMajor === m;
                   return (
                     <button
-                      key={c.id || c.sub}
+                      key={m}
                       type="button"
-                      onClick={() => setSelectedSubCat({ major: c.major, sub: c.sub, emoji: c.emoji || '📝' })}
-                      className={`flex items-center gap-1.5 p-2 rounded-xl border transition text-left ${
-                        isSelected
+                      data-major-name={m}
+                      onTouchStart={() => handleMajorPointerDown(m)}
+                      onMouseDown={() => handleMajorPointerDown(m)}
+                      onMouseEnter={() => {
+                        if (draggingMajor && draggingMajor !== m) {
+                          const fromIdx = orderedMajorsRef.current.indexOf(draggingMajor);
+                          const toIdx = orderedMajorsRef.current.indexOf(m);
+                          moveMajorItem(fromIdx, toIdx);
+                        }
+                      }}
+                      onClick={() => {
+                        if (!draggingMajor) handleSelectMajor(m);
+                      }}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap shrink-0 transition cursor-grab active:cursor-grabbing ${
+                        isDragging
+                          ? 'scale-105 bg-latte-600 text-white shadow-md ring-2 ring-latte-400 z-10'
+                          : selectedMajor === m
+                          ? 'bg-latte-800 text-white shadow-2xs dark:bg-neutral-100 dark:text-neutral-900'
+                          : 'bg-white dark:bg-neutral-700 text-latte-700 dark:text-neutral-300 border border-latte-200 dark:border-neutral-600 hover:bg-latte-100'
+                      }`}
+                    >
+                      {m}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* 子分類網格：固定高度，支援上下滾動與長按拖曳排序 */}
+              <div
+                onTouchMove={handleSubTouchMove}
+                onTouchEnd={handleSubPointerUp}
+                onMouseUp={handleSubPointerUp}
+                className="h-[88px] md:h-[112px] overflow-y-auto no-scrollbar grid grid-cols-3 md:grid-cols-4 content-start gap-2 p-1.5 bg-white/70 dark:bg-neutral-900/40 rounded-xl border border-latte-200/60 dark:border-neutral-700/60 select-none"
+              >
+                {orderedSubs.map((c) => {
+                  const subKey = c.id || c.sub;
+                  const isSelected = selectedSubCat?.major === c.major && selectedSubCat?.sub === c.sub;
+                  const isDragging = draggingSubId === subKey;
+                  return (
+                    <button
+                      key={subKey}
+                      type="button"
+                      data-sub-key={subKey}
+                      onTouchStart={() => handleSubPointerDown(subKey)}
+                      onMouseDown={() => handleSubPointerDown(subKey)}
+                      onMouseEnter={() => {
+                        if (draggingSubId && draggingSubId !== subKey) {
+                          const fromIdx = orderedSubsRef.current.findIndex((item) => (item.id || item.sub) === draggingSubId);
+                          const toIdx = orderedSubsRef.current.findIndex((item) => (item.id || item.sub) === subKey);
+                          moveSubItem(fromIdx, toIdx);
+                        }
+                      }}
+                      onClick={() => {
+                        if (!draggingSubId) setSelectedSubCat({ major: c.major, sub: c.sub, emoji: c.emoji || '📝' });
+                      }}
+                      className={`flex items-center gap-1.5 p-2 rounded-xl border transition text-left cursor-grab active:cursor-grabbing ${
+                        isDragging
+                          ? 'scale-105 border-latte-600 bg-latte-100 dark:bg-neutral-600 shadow-md z-10'
+                          : isSelected
                           ? 'border-latte-600 bg-white dark:bg-neutral-700 ring-2 ring-latte-600/30 font-bold'
                           : 'border-latte-200 dark:border-neutral-700 bg-white/80 dark:bg-neutral-800 hover:bg-white'
                       }`}
@@ -1922,8 +2118,8 @@
                         e.stopPropagation();
                         if (!draggingCatId) openEditCategoryModal(c);
                       }}
-                      className="flex items-center gap-1 text-left hover:text-latte-700 dark:hover:text-white"
-                      title="點擊編輯分類"
+                      className="flex items-center gap-1 text-left hover:text-latte-700 dark:hover:text-white cursor-pointer"
+                      title="點一下編輯類別"
                     >
                       <span>{c.emoji || '📝'} {c.type === 'income' ? '收' : '支'} | {c.major} / {c.sub}</span>
                     </button>
@@ -2009,50 +2205,6 @@
               </form>
             </div>
           )}
-
-          <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-4">
-            <h3 className="font-bold text-base">自訂收支分類（目前帳本）</h3>
-            <form onSubmit={addCategory} className="flex flex-wrap gap-2">
-              <select
-                value={catType}
-                onChange={(e) => setCatType(e.target.value)}
-                className="p-2.5 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600 text-xs"
-              >
-                <option value="expense">支出</option>
-                <option value="income">收入</option>
-              </select>
-              <input
-                type="text"
-                placeholder="Emoji"
-                value={catEmoji}
-                onChange={(e) => setCatEmoji(e.target.value)}
-                className="w-16 text-center p-2.5 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600 text-sm"
-              />
-              <input
-                type="text"
-                placeholder="大分類名稱"
-                value={catMajor}
-                onChange={(e) => setCatMajor(e.target.value)}
-                className="flex-1 min-w-[100px] p-2.5 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600 text-xs"
-              />
-              <input
-                type="text"
-                placeholder="子分類名稱"
-                value={catSub}
-                onChange={(e) => setCatSub(e.target.value)}
-                className="flex-1 min-w-[100px] p-2.5 rounded-xl border dark:bg-neutral-700 dark:border-neutral-600 text-xs"
-              />
-              <button type="submit" className="px-4 py-2.5 rounded-xl bg-latte-600 text-white font-semibold text-xs">新增分類</button>
-            </form>
-            <div className="flex flex-wrap gap-2 pt-2">
-              {categories.map((c) => (
-                <div key={c.id} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs border bg-latte-50 dark:bg-neutral-700/50 border-latte-200 dark:border-neutral-600">
-                  <span>{c.emoji || '📝'} {c.type === 'income' ? '收' : '支'} | {c.major} / {c.sub}</span>
-                  <button type="button" onClick={() => deleteCategory(c)} className="text-rose-500 hover:font-bold ml-1 px-1" title="刪除此分類">×</button>
-                </div>
-              ))}
-            </div>
-          </div>
 
           <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-4">
             <h3 className="font-bold text-base">付款方式管理（目前帳本）</h3>
