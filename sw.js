@@ -1,4 +1,4 @@
-const CACHE_NAME = 'warm-ledger-20261114-v8';
+const CACHE_NAME = 'warm-ledger-20261114-v9';
 
 // 需要快取的核心靜態資源
 const CORE_ASSETS = [
