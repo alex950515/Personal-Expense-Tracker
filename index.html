@@ -460,25 +460,46 @@
                 className="w-full p-2.5 rounded-xl border border-latte-300 dark:border-neutral-600 dark:bg-neutral-700 text-sm"
               />
             )}
-            <div className="flex justify-end gap-2 pt-2">
-              {dialog.mode !== 'alert' && (
-                <button
-                  type="button"
-                  onClick={() => onClose(null)}
-                  className="px-4 py-2 rounded-xl bg-latte-100 dark:bg-neutral-700 text-latte-700 dark:text-neutral-200 text-sm font-medium"
-                >
-                  取消
-                </button>
+            <div className="flex flex-wrap justify-end gap-2 pt-2">
+              {dialog.mode === 'choice' ? (
+                (dialog.choices || []).map((choice) => (
+                  <button
+                    key={String(choice.value)}
+                    type="button"
+                    onClick={() => onClose(choice.value)}
+                    className={`px-4 py-2 rounded-xl text-sm font-semibold ${
+                      choice.variant === 'danger'
+                        ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                        : choice.variant === 'primary'
+                        ? 'bg-latte-600 hover:bg-latte-700 text-white'
+                        : 'bg-latte-100 dark:bg-neutral-700 text-latte-700 dark:text-neutral-200'
+                    }`}
+                  >
+                    {choice.label}
+                  </button>
+                ))
+              ) : (
+                <>
+                  {dialog.mode !== 'alert' && (
+                    <button
+                      type="button"
+                      onClick={() => onClose(null)}
+                      className="px-4 py-2 rounded-xl bg-latte-100 dark:bg-neutral-700 text-latte-700 dark:text-neutral-200 text-sm font-medium"
+                    >
+                      取消
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => onClose(dialog.mode === 'prompt' ? inputValue : true)}
+                    className={`px-4 py-2 rounded-xl text-white text-sm font-semibold ${
+                      dialog.danger ? 'bg-rose-600 hover:bg-rose-700' : 'bg-latte-600 hover:bg-latte-700'
+                    }`}
+                  >
+                    {dialog.confirmText || '確定'}
+                  </button>
+                </>
               )}
-              <button
-                type="button"
-                onClick={() => onClose(dialog.mode === 'prompt' ? inputValue : true)}
-                className={`px-4 py-2 rounded-xl text-white text-sm font-semibold ${
-                  dialog.danger ? 'bg-rose-600 hover:bg-rose-700' : 'bg-latte-600 hover:bg-latte-700'
-                }`}
-              >
-                {dialog.confirmText || '確定'}
-              </button>
             </div>
           </div>
         </div>
@@ -1349,6 +1370,8 @@
         return filteredTx.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
       }, [filteredTx]);
 
+      const PIE_COLORS = ['#9C8267', '#D97706', '#059669', '#E11D48', '#2563EB', '#7C3AED', '#0D9488', '#DB2777'];
+
       const byMajor = useMemo(() => {
         const map = {};
         filteredTx.forEach((t) => {
@@ -1359,22 +1382,59 @@
             name,
             amount,
             pct: totalAmount > 0 ? Math.round((amount / totalAmount) * 100) : 0,
+            exactRatio: totalAmount > 0 ? amount / totalAmount : 0,
           }))
-          .sort((a, b) => b.amount - a.amount);
+          .sort((a, b) => b.amount - a.amount)
+          .map((item, idx) => ({
+            ...item,
+            color: PIE_COLORS[idx % PIE_COLORS.length],
+          }));
       }, [filteredTx, totalAmount]);
+
+      const pieSlices = useMemo(() => {
+        if (totalAmount <= 0 || byMajor.length === 0) return [];
+        const cx = 80;
+        const cy = 80;
+        const r = 68;
+        let cumulativeAngle = -Math.PI / 2;
+
+        return byMajor.map((item) => {
+          const sliceAngle = item.exactRatio * Math.PI * 2;
+          const startAngle = cumulativeAngle;
+          const endAngle = cumulativeAngle + sliceAngle;
+          cumulativeAngle = endAngle;
+
+          if (item.exactRatio >= 0.9999) {
+            return { ...item, isFullCircle: true, cx, cy, r };
+          }
+          const x1 = cx + r * Math.cos(startAngle);
+          const y1 = cy + r * Math.sin(startAngle);
+          const x2 = cx + r * Math.cos(endAngle);
+          const y2 = cy + r * Math.sin(endAngle);
+          const largeArcFlag = sliceAngle > Math.PI ? 1 : 0;
+          const d = `M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${largeArcFlag} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z`;
+          return { ...item, isFullCircle: false, d };
+        });
+      }, [byMajor, totalAmount]);
 
       const byMember = useMemo(() => {
         if (activeLedger?.type !== 'couple') return [];
         const map = {};
         filteredTx.forEach((t) => {
+          const key = t.payer_id || t.payer_nickname || 'member';
           const nick = t.payer_nickname || '成員';
-          map[nick] = (map[nick] || 0) + (Number(t.amount) || 0);
+          if (!map[key]) {
+            map[key] = { key, nickname: nick, amount: 0, items: [] };
+          }
+          map[key].nickname = nick;
+          map[key].amount += Number(t.amount) || 0;
+          map[key].items.push(t);
         });
-        return Object.entries(map)
-          .map(([nickname, amount]) => ({
-            nickname,
-            amount,
-            pct: totalAmount > 0 ? Math.round((amount / totalAmount) * 100) : 0,
+        return Object.values(map)
+          .map((entry) => ({
+            ...entry,
+            pct: totalAmount > 0 ? Math.round((entry.amount / totalAmount) * 100) : 0,
+            items: [...entry.items].sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.created_ms || 0) - (a.created_ms || 0)),
           }))
           .sort((a, b) => b.amount - a.amount);
       }, [filteredTx, totalAmount, activeLedger]);
@@ -1476,39 +1536,96 @@
                 {periodMode === 'year' ? '本年度' : '本月'}尚無{statType === 'expense' ? '支出' : '收入'}統計資料
               </div>
             ) : (
-              <div className="space-y-3">
-                {byMajor.map((item) => (
-                  <div key={item.name} className="space-y-1.5 text-xs sm:text-sm">
-                    <div className="flex justify-between font-semibold">
-                      <span>{item.name} ({item.pct}%)</span>
-                      <span>{currencySymbol}{item.amount.toLocaleString()}</span>
-                    </div>
-                    <div className="w-full h-2.5 rounded-full bg-latte-100 dark:bg-neutral-700 overflow-hidden">
-                      <div
-                        className={`h-full ${statType === 'expense' ? 'bg-rose-500' : 'bg-emerald-500'}`}
-                        style={{ width: `${item.pct}%` }}
-                      ></div>
-                    </div>
+              <div className="space-y-5">
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-5 py-2 bg-latte-50/70 dark:bg-neutral-900/40 rounded-2xl p-4 border border-latte-100 dark:border-neutral-700/60">
+                  <svg viewBox="0 0 160 160" className="w-40 h-40 shrink-0">
+                    {pieSlices.map((slice) =>
+                      slice.isFullCircle ? (
+                        <circle key={slice.name} cx={slice.cx} cy={slice.cy} r={slice.r} fill={slice.color} />
+                      ) : (
+                        <path key={slice.name} d={slice.d} fill={slice.color} stroke="#ffffff" strokeWidth="1.5" />
+                      )
+                    )}
+                    <circle cx="80" cy="80" r="34" className="fill-white dark:fill-neutral-800" />
+                    <text x="80" y="77" textAnchor="middle" className="fill-latte-500 dark:fill-neutral-400 text-[10px] font-medium">
+                      {statType === 'expense' ? '總支出' : '總收入'}
+                    </text>
+                    <text x="80" y="92" textAnchor="middle" className="fill-latte-900 dark:fill-white text-[11px] font-bold">
+                      100%
+                    </text>
+                  </svg>
+
+                  <div className="w-full grid grid-cols-2 gap-2 text-xs">
+                    {byMajor.map((item) => (
+                      <div key={item.name} className="flex items-center justify-between gap-1.5 bg-white dark:bg-neutral-800 px-2.5 py-1.5 rounded-xl border border-latte-200/60 dark:border-neutral-700">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: item.color }}></span>
+                          <span className="font-semibold truncate">{item.name}</span>
+                        </div>
+                        <span className="font-bold text-latte-700 dark:text-neutral-300 shrink-0">{item.pct}%</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                </div>
+
+                <div className="space-y-3">
+                  {byMajor.map((item) => (
+                    <div key={item.name} className="space-y-1.5 text-xs sm:text-sm">
+                      <div className="flex justify-between font-semibold">
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: item.color }}></span>
+                          {item.name} ({item.pct}%)
+                        </span>
+                        <span>{currencySymbol}{item.amount.toLocaleString()}</span>
+                      </div>
+                      <div className="w-full h-2.5 rounded-full bg-latte-100 dark:bg-neutral-700 overflow-hidden">
+                        <div
+                          className="h-full transition-all"
+                          style={{ width: `${item.pct}%`, backgroundColor: item.color }}
+                        ></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
 
           {activeLedger?.type === 'couple' && byMember.length > 0 && (
-            <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-3">
-              <h3 className="font-bold text-sm sm:text-base">共同帳本成員{statType === 'expense' ? '付款' : '入帳'}佔比</h3>
-              {byMember.map((m) => (
-                <div key={m.nickname} className="space-y-1.5 text-xs sm:text-sm">
-                  <div className="flex justify-between font-semibold">
-                    <span>{m.nickname} ({m.pct}%)</span>
-                    <span>{currencySymbol}{m.amount.toLocaleString()}</span>
+            <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-4">
+              <h3 className="font-bold text-sm sm:text-base">共同帳本成員{statType === 'expense' ? '消費佔比與項目明細' : '入帳佔比與項目明細'}</h3>
+              <div className="space-y-4">
+                {byMember.map((m) => (
+                  <div key={m.key} className="p-3.5 rounded-2xl bg-latte-50/80 dark:bg-neutral-900/40 border border-latte-200/70 dark:border-neutral-700 space-y-2.5">
+                    <div className="space-y-1.5 text-xs sm:text-sm">
+                      <div className="flex justify-between font-bold">
+                        <span>{m.nickname} ({m.pct}% · 共 {m.items.length} 筆)</span>
+                        <span>{currencySymbol}{m.amount.toLocaleString()}</span>
+                      </div>
+                      <div className="w-full h-2.5 rounded-full bg-latte-200/70 dark:bg-neutral-700 overflow-hidden">
+                        <div className="h-full bg-latte-600" style={{ width: `${m.pct}%` }}></div>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-latte-200/60 dark:border-neutral-700/60 divide-y divide-latte-100 dark:divide-neutral-800">
+                      {m.items.map((tx) => (
+                        <div key={tx.id} className="py-1.5 flex items-center justify-between gap-2 text-xs">
+                          <div className="min-w-0 flex items-center gap-1.5">
+                            <span className="text-[11px] text-latte-500 dark:text-neutral-400 shrink-0">{tx.date?.slice(5)}</span>
+                            <span className="font-semibold text-latte-800 dark:text-neutral-200 shrink-0">{tx.sub_category}</span>
+                            {tx.item_name && (
+                              <span className="text-latte-600 dark:text-neutral-400 truncate">· {tx.item_name}</span>
+                            )}
+                          </div>
+                          <span className={`font-semibold shrink-0 ${statType === 'expense' ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                            {currencySymbol}{Number(tx.amount).toLocaleString()}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="w-full h-2.5 rounded-full bg-latte-100 dark:bg-neutral-700 overflow-hidden">
-                    <div className="h-full bg-latte-600" style={{ width: `${m.pct}%` }}></div>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -1569,29 +1686,29 @@
             onTouchEnd={handleTouchEnd}
             onClick={() => { if (offsetX !== 0) setOffsetX(0); }}
             style={{ transform: `translateX(${offsetX}px)` }}
-            className="relative bg-white dark:bg-neutral-800 px-5 py-4 flex items-center justify-between gap-3 transition-transform duration-150 group"
+            className="relative bg-white dark:bg-neutral-800 px-4 py-3 flex items-center justify-between gap-2.5 transition-transform duration-150 group"
           >
-            <div className="flex items-center gap-3.5 min-w-0">
-              <div className="w-11 h-11 rounded-2xl bg-latte-100 dark:bg-neutral-700 flex items-center justify-center text-xl shrink-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-xl bg-latte-100 dark:bg-neutral-700 flex items-center justify-center text-base shrink-0">
                 {categoryEmoji || '📝'}
               </div>
-              <div className="space-y-1 min-w-0">
+              <div className="space-y-0.5 min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="font-bold text-[16px] leading-snug text-latte-900 dark:text-white">
+                  <span className="font-bold text-sm leading-snug text-latte-900 dark:text-white">
                     {tx.sub_category}
                   </span>
                   {tx.item_name && (
-                    <span className="text-[16px] leading-snug text-latte-700 dark:text-neutral-300 truncate">
+                    <span className="text-xs leading-snug text-latte-700 dark:text-neutral-300 truncate">
                       · {tx.item_name}
                     </span>
                   )}
                   {activeLedger?.type === 'couple' && (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300">
+                    <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300">
                       {tx.payer_nickname}
                     </span>
                   )}
                 </div>
-                <div className="text-xs text-latte-500 dark:text-neutral-400 flex gap-2.5 flex-wrap">
+                <div className="text-[11px] text-latte-500 dark:text-neutral-400 flex gap-2 flex-wrap">
                   <span>{tx.payment_method}</span>
                   {tx.note && <span className="truncate">備註：{tx.note}</span>}
                 </div>
@@ -1599,7 +1716,7 @@
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
-              <span className={`font-bold text-[16px] leading-snug ${tx.type === 'income' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+              <span className={`font-bold text-sm leading-snug ${tx.type === 'income' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                 {tx.type === 'income' ? `+${currencySymbol}${Number(tx.amount).toLocaleString()}` : `-${currencySymbol}${Number(tx.amount).toLocaleString()}`}
               </span>
               <div className="hidden md:flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -2058,7 +2175,7 @@
       );
     }
 
-    function SettingsView({ isDemoMode, onDemoUpdate, onOpenConfigModal, onExitDemo, user, profile, ledgers, activeLedger, setActiveLedgerId, invitations, categories, paymentMethods, transactions, theme, setTheme, showToast, askConfirm, askPrompt, onInstallApp, isStandalone }) {
+    function SettingsView({ isDemoMode, onDemoUpdate, onOpenConfigModal, onExitDemo, user, profile, ledgers, activeLedger, setActiveLedgerId, invitations, categories, paymentMethods, transactions, theme, setTheme, showToast, askConfirm, askPrompt, askChoice, onInstallApp, isStandalone }) {
       const [nicknameInput, setNicknameInput] = useState(profile?.nickname || '');
       const [newCoupleLedgerName, setNewCoupleLedgerName] = useState('');
       const [inviteEmail, setInviteEmail] = useState('');
@@ -2096,15 +2213,40 @@
       const isOwner = activeLedger?.owner_id === user.uid;
 
       async function saveNickname() {
-        if (!nicknameInput.trim()) return;
+        const trimmedNick = nicknameInput.trim();
+        if (!trimmedNick) return;
         if (isDemoMode) {
-          onDemoUpdate?.('nickname', nicknameInput.trim());
-          showToast('顯示暱稱已更新');
+          onDemoUpdate?.('nickname', trimmedNick);
+          showToast('顯示暱稱已更新並同步至共同帳本帳目');
           return;
         }
         try {
-          await firebase.firestore().collection('profiles').doc(user.uid).update({ nickname: nicknameInput.trim() });
-          showToast('顯示暱稱已更新');
+          const db = firebase.firestore();
+          await db.collection('profiles').doc(user.uid).update({ nickname: trimmedNick });
+
+          const coupleLedgers = ledgers.filter((l) => l.type === 'couple');
+          for (const l of coupleLedgers) {
+            if (l.members && l.members[user.uid]) {
+              await db.collection('ledgers').doc(l.id).update({
+                [`members.${user.uid}.nickname`]: trimmedNick,
+              });
+            }
+            const txSnap = await db.collection('transactions')
+              .where('ledger_id', '==', l.id)
+              .where('payer_id', '==', user.uid)
+              .get();
+            if (!txSnap.empty) {
+              const docs = txSnap.docs;
+              for (let i = 0; i < docs.length; i += 400) {
+                const batch = db.batch();
+                docs.slice(i, i + 400).forEach((d) => {
+                  batch.update(d.ref, { payer_nickname: trimmedNick });
+                });
+                await batch.commit();
+              }
+            }
+          }
+          showToast('顯示暱稱已更新並同步至共同帳本帳目');
         } catch (err) {
           showToast('更新暱稱失敗：' + err.message);
         }
@@ -2440,16 +2582,72 @@
           major: editCatForm.major.trim(),
           sub: editCatForm.sub.trim(),
         };
+
+        const oldType = editingCategory.type;
+        const oldMajor = editingCategory.major;
+        const oldSub = editingCategory.sub;
+        const nameChanged = oldType !== updated.type || oldMajor !== updated.major || oldSub !== updated.sub;
+
+        let syncExistingTx = false;
+        if (nameChanged) {
+          const matchingCount = (transactions || []).filter(
+            (t) => t.type === oldType && t.major_category === oldMajor && t.sub_category === oldSub
+          ).length;
+          if (matchingCount > 0) {
+            const choice = await askChoice({
+              title: '更動分類名稱確認',
+              message: `目前已有 ${matchingCount} 筆「${oldMajor} / ${oldSub}」的已記錄帳目。\n請問已記錄帳目要同步更新為新類別，還是保留原有紀錄？`,
+              choices: [
+                { label: '取消', value: null },
+                { label: '保留原有帳目', value: 'keep' },
+                { label: '同步更新帳目', value: 'sync', variant: 'primary' },
+              ],
+            });
+            if (!choice) return;
+            syncExistingTx = choice === 'sync';
+          }
+        }
+
         if (isDemoMode) {
-          onDemoUpdate?.('editCategory', { id: editingCategory.id, ...updated });
+          onDemoUpdate?.('editCategory', {
+            id: editingCategory.id,
+            ...updated,
+            syncExistingTx,
+            oldType,
+            oldMajor,
+            oldSub,
+          });
           setEditingCategory(null);
-          showToast('已更新分類設定');
+          showToast(syncExistingTx ? '已更新分類並同步更新已記錄帳目' : '已更新分類設定');
           return;
         }
         try {
-          await firebase.firestore().collection('categories').doc(editingCategory.id).update(updated);
+          const db = firebase.firestore();
+          await db.collection('categories').doc(editingCategory.id).update(updated);
+
+          if (syncExistingTx && activeLedger) {
+            const txSnap = await db.collection('transactions')
+              .where('ledger_id', '==', activeLedger.id)
+              .get();
+            const targetDocs = txSnap.docs.filter((d) => {
+              const data = d.data();
+              return data.type === oldType && data.major_category === oldMajor && data.sub_category === oldSub;
+            });
+            for (let i = 0; i < targetDocs.length; i += 400) {
+              const batch = db.batch();
+              targetDocs.slice(i, i + 400).forEach((d) => {
+                batch.update(d.ref, {
+                  type: updated.type,
+                  major_category: updated.major,
+                  sub_category: updated.sub,
+                });
+              });
+              await batch.commit();
+            }
+          }
+
           setEditingCategory(null);
-          showToast('已更新分類設定');
+          showToast(syncExistingTx ? '已更新分類並同步更新已記錄帳目' : '已更新分類設定');
         } catch (err) {
           showToast('更新分類失敗：' + err.message);
         }
@@ -2519,21 +2717,62 @@
       }
 
       async function deleteCategory(cat) {
-        const ok = await askConfirm({
-          title: '刪除分類',
-          message: `確定要刪除「${cat.major} / ${cat.sub}」嗎？`,
-          danger: true,
-          confirmText: '確認刪除',
-        });
-        if (!ok) return;
+        const matchingCount = (transactions || []).filter(
+          (t) => t.type === cat.type && t.major_category === cat.major && t.sub_category === cat.sub
+        ).length;
+
+        let deleteTransactions = false;
+        if (matchingCount > 0) {
+          const choice = await askChoice({
+            title: '刪除分類確認',
+            message: `「${cat.major} / ${cat.sub}」共有 ${matchingCount} 筆已記錄帳目。\n請問刪除類別時，已記錄的帳目要一併刪除還是保留？`,
+            choices: [
+              { label: '取消', value: null },
+              { label: '保留帳目', value: 'keep' },
+              { label: '刪除帳目', value: 'delete', variant: 'danger' },
+            ],
+          });
+          if (!choice) return;
+          deleteTransactions = choice === 'delete';
+        } else {
+          const ok = await askConfirm({
+            title: '刪除分類',
+            message: `確定要刪除「${cat.major} / ${cat.sub}」嗎？`,
+            danger: true,
+            confirmText: '確認刪除',
+          });
+          if (!ok) return;
+        }
+
         if (isDemoMode) {
-          onDemoUpdate?.('deleteCategory', { id: cat.id });
-          showToast('已刪除該分類');
+          onDemoUpdate?.('deleteCategory', {
+            id: cat.id,
+            deleteTransactions,
+            type: cat.type,
+            major: cat.major,
+            sub: cat.sub,
+          });
+          showToast(deleteTransactions ? '已刪除分類與相關帳目' : '已刪除分類並保留既有帳目');
           return;
         }
         try {
-          await firebase.firestore().collection('categories').doc(cat.id).delete();
-          showToast('已刪除該分類');
+          const db = firebase.firestore();
+          await db.collection('categories').doc(cat.id).delete();
+          if (deleteTransactions && activeLedger) {
+            const txSnap = await db.collection('transactions')
+              .where('ledger_id', '==', activeLedger.id)
+              .get();
+            const targetDocs = txSnap.docs.filter((d) => {
+              const data = d.data();
+              return data.type === cat.type && data.major_category === cat.major && data.sub_category === cat.sub;
+            });
+            for (let i = 0; i < targetDocs.length; i += 400) {
+              const batch = db.batch();
+              targetDocs.slice(i, i + 400).forEach((d) => batch.delete(d.ref));
+              await batch.commit();
+            }
+          }
+          showToast(deleteTransactions ? '已刪除分類與相關帳目' : '已刪除分類並保留既有帳目');
         } catch (err) {
           showToast('刪除失敗：' + err.message);
         }
@@ -3436,6 +3675,12 @@
         });
       }
 
+      function askChoice({ title, message = '', choices = [] }) {
+        return new Promise((resolve) => {
+          setDialogState({ mode: 'choice', title, message, choices, resolve });
+        });
+      }
+
       const [theme, setTheme] = useState(() => safeStorage.get('theme', 'system'));
       useEffect(() => {
         const root = document.documentElement;
@@ -3623,6 +3868,49 @@
 
       const [txModalOpen, setTxModalOpen] = useState(false);
       const [editingTx, setEditingTx] = useState(null);
+
+      // 行動版瀏覽器返回鍵支援：攔截 popstate，優先關閉彈窗或返回首頁，避免直接退出畫面
+      const navStateRef = useRef({ txModalOpen: false, dialogState: null, configModalOpen: false, activeTab: 'home' });
+      navStateRef.current = { txModalOpen, dialogState, configModalOpen, activeTab };
+
+      useEffect(() => {
+        try {
+          window.history.replaceState({ appGuard: 'base' }, '');
+          window.history.pushState({ appGuard: 'active' }, '');
+        } catch (e) {}
+
+        const handlePopState = () => {
+          const cur = navStateRef.current;
+          if (cur.dialogState) {
+            const res = cur.dialogState.resolve;
+            setDialogState(null);
+            if (res) res(null);
+            try { window.history.pushState({ appGuard: 'active' }, ''); } catch (e) {}
+            return;
+          }
+          if (cur.txModalOpen) {
+            setTxModalOpen(false);
+            setEditingTx(null);
+            try { window.history.pushState({ appGuard: 'active' }, ''); } catch (e) {}
+            return;
+          }
+          if (cur.configModalOpen) {
+            setConfigModalOpen(false);
+            try { window.history.pushState({ appGuard: 'active' }, ''); } catch (e) {}
+            return;
+          }
+          if (cur.activeTab !== 'home') {
+            setActiveTab('home');
+            try { window.history.pushState({ appGuard: 'active' }, ''); } catch (e) {}
+            return;
+          }
+          try { window.history.pushState({ appGuard: 'active' }, ''); } catch (e) {}
+          showToast('已在首頁畫面');
+        };
+
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+      }, []);
 
       useEffect(() => {
         if (!user || !fbReady || isDemoMode) return;
@@ -4112,6 +4400,26 @@
                 onDemoUpdate={(action, payload) => {
                   if (action === 'nickname') {
                     setProfile((prev) => ({ ...prev, nickname: payload }));
+                    setLedgers((prev) =>
+                      prev.map((l) => {
+                        if (l.type !== 'couple' || !l.members?.[user.uid]) return l;
+                        return {
+                          ...l,
+                          members: {
+                            ...l.members,
+                            [user.uid]: { ...l.members[user.uid], nickname: payload },
+                          },
+                        };
+                      })
+                    );
+                    const coupleIds = new Set(ledgers.filter((l) => l.type === 'couple').map((l) => l.id));
+                    setTransactions((prev) =>
+                      prev.map((t) =>
+                        coupleIds.has(t.ledger_id) && t.payer_id === user.uid
+                          ? { ...t, payer_nickname: payload }
+                          : t
+                      )
+                    );
                   } else if (action === 'ledgerName') {
                     setLedgers((prev) => prev.map((l) => (l.id === payload.id ? { ...l, name: payload.name } : l)));
                   } else if (action === 'currency') {
@@ -4152,9 +4460,40 @@
                   } else if (action === 'addCategory') {
                     setCategories((prev) => [...prev, payload]);
                   } else if (action === 'editCategory') {
-                    setCategories((prev) => prev.map((c) => (c.id === payload.id ? { ...c, ...payload } : c)));
+                    setCategories((prev) =>
+                      prev.map((c) =>
+                        c.id === payload.id
+                          ? { ...c, type: payload.type, emoji: payload.emoji, major: payload.major, sub: payload.sub }
+                          : c
+                      )
+                    );
+                    if (payload.syncExistingTx) {
+                      setTransactions((prev) =>
+                        prev.map((t) =>
+                          t.ledger_id === activeLedger?.id &&
+                          t.type === payload.oldType &&
+                          t.major_category === payload.oldMajor &&
+                          t.sub_category === payload.oldSub
+                            ? { ...t, type: payload.type, major_category: payload.major, sub_category: payload.sub }
+                            : t
+                        )
+                      );
+                    }
                   } else if (action === 'deleteCategory') {
                     setCategories((prev) => prev.filter((c) => c.id !== payload.id));
+                    if (payload.deleteTransactions) {
+                      setTransactions((prev) =>
+                        prev.filter(
+                          (t) =>
+                            !(
+                              t.ledger_id === activeLedger?.id &&
+                              t.type === payload.type &&
+                              t.major_category === payload.major &&
+                              t.sub_category === payload.sub
+                            )
+                        )
+                      );
+                    }
                   } else if (action === 'reorderCategories') {
                     setCategories(payload.map((item, idx) => ({ ...item, sort_order: idx })));
                   } else if (action === 'addPaymentMethod') {
@@ -4183,6 +4522,7 @@
                 showToast={showToast}
                 askConfirm={askConfirm}
                 askPrompt={askPrompt}
+                askChoice={askChoice}
                 deferredPrompt={deferredPrompt}
                 onInstallApp={handleInstallApp}
                 isStandalone={isStandalone}
