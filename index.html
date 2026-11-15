@@ -4,14 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>個人與情侶共同記帳系統</title>
-  <!-- PWA Manifest 與行動裝置主畫面設定 -->
-  <link rel="manifest" href="./manifest.json" />
+  <!-- 行動裝置主畫面設定 -->
   <meta name="theme-color" content="#7D654D" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="暖心記帳" />
-  <link rel="icon" type="image/png" href="./icon.png" />
-  <link rel="apple-touch-icon" href="./icon.png" />
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -37,10 +34,10 @@
       }
     }
   </script>
-  <!-- React & Babel -->
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- React & Babel (鎖定穩定版本避免 CDN 異常) -->
+  <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
   <!-- Firebase Compat SDK -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
@@ -52,10 +49,56 @@
   </style>
 </head>
 <body class="bg-latte-50 text-latte-900 dark:bg-neutral-900 dark:text-latte-100 transition-colors">
-  <div id="root"></div>
+  <div id="root">
+    <!-- 初始載入提示，若腳本載入異常會由全域錯誤攔截顯示原因 -->
+    <div id="boot-loader" style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#7D654D;font-size:14px;">
+      <div style="width:40px;height:40px;border-radius:14px;background:#7D654D;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:18px;">記</div>
+      <div>正在啟動暖心日常記帳本...</div>
+    </div>
+  </div>
 
-  <script type="text/babel">
+  <!-- 全域錯誤攔截器：防止任何腳本或 JSX 編譯錯誤導致無聲白屏 -->
+  <script>
+    window.addEventListener('error', function (event) {
+      var root = document.getElementById('root');
+      if (root && document.getElementById('boot-loader')) {
+        root.innerHTML =
+          '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:#FAF8F5;">' +
+          '<div style="background:#fff;border:1px solid #fecdd3;border-radius:20px;padding:24px;max-width:460px;width:100%;box-shadow:0 10px 25px rgba(0,0,0,0.06);">' +
+          '<h3 style="margin:0 0 8px;color:#be123c;font-size:16px;font-weight:700;">頁面載入發生錯誤</h3>' +
+          '<p style="margin:0 0 12px;color:#5E4B38;font-size:13px;line-height:1.5;">請檢查網路連線是否可正常載入 CDN 套件，或點擊下方重新整理：</p>' +
+          '<pre style="background:#fff1f2;color:#9f1239;padding:10px;border-radius:10px;font-size:11px;overflow:auto;white-space:pre-wrap;">' +
+          (event.message || '未知腳本錯誤') +
+          '</pre>' +
+          '<button onclick="window.location.reload()" style="margin-top:14px;width:100%;padding:10px;border:none;border-radius:12px;background:#7D654D;color:#fff;font-weight:600;cursor:pointer;">重新載入</button>' +
+          '</div></div>';
+      }
+    });
+  </script>
+
+  <script type="text/babel" data-presets="react">
     const { useState, useEffect, useMemo, useRef } = React;
+
+    // 安全的 localStorage 存取工具（避免沙盒 / 無痕模式 SecurityError 導致白屏）
+    const safeStorage = {
+      get(key, fallback = '') {
+        try {
+          return window.localStorage.getItem(key) ?? fallback;
+        } catch (e) {
+          return fallback;
+        }
+      },
+      set(key, value) {
+        try {
+          window.localStorage.setItem(key, value);
+        } catch (e) {}
+      },
+      remove(key) {
+        try {
+          window.localStorage.removeItem(key);
+        } catch (e) {}
+      }
+    };
 
     // 依附檔圖片設定所有帳本的初始預設分類與專屬圖示
     const DEFAULT_CATEGORIES = [
@@ -136,7 +179,6 @@
     ];
 
     function getTodayStr() {
-      // 使用標準 IANA 時區 Asia/Taipei 即時取得當下台灣真實日期，避免跨日或快取殘留舊日期
       try {
         const parts = new Intl.DateTimeFormat('en-CA', {
           timeZone: 'Asia/Taipei',
@@ -148,9 +190,7 @@
         const m = parts.find((p) => p.type === 'month')?.value;
         const d = parts.find((p) => p.type === 'day')?.value;
         if (y && m && d) return `${y}-${m}-${d}`;
-      } catch (e) {
-        // 備援方案
-      }
+      } catch (e) {}
       const now = new Date();
       const taipei = new Date(now.getTime() + (8 * 60 + now.getTimezoneOffset()) * 60000);
       const yyyy = taipei.getFullYear();
@@ -163,7 +203,6 @@
       return dateStr.slice(0, 7);
     }
 
-    // 安全的四則運算計算函式（避免使用 new Function 觸發 CSP 阻擋或語法錯誤）
     function evaluateMathExpression(expr) {
       try {
         const sanitized = String(expr).replace(/×/g, '*').replace(/÷/g, '/').replace(/[^0-9+\-*/.]/g, '');
@@ -173,7 +212,6 @@
         const tokens = cleaned.match(/(\d+\.?\d*|\.\d+|[+\-*/])/g);
         if (!tokens || tokens.length === 0) return 0;
 
-        // 先乘除
         const stack = [];
         let i = 0;
         while (i < tokens.length) {
@@ -190,7 +228,6 @@
           }
         }
 
-        // 後加減
         let result = parseFloat(stack[0] || '0');
         for (let j = 1; j < stack.length; j += 2) {
           const op = stack[j];
@@ -218,6 +255,128 @@
       } catch (e) {
         return null;
       }
+    }
+
+    // 建立單機展示 / 離線體驗初始資料，讓未設定 Firebase 時也能直接體驗完整記帳系統
+    function createDemoInitialData() {
+      const today = getTodayStr();
+      const ym = getYearMonthStr(today);
+      const demoCategories = [];
+      let idx = 0;
+      DEFAULT_CATEGORIES.forEach((cat) => {
+        cat.subs.forEach((subItem) => {
+          demoCategories.push({
+            id: `demo_cat_${idx}`,
+            ledger_id: 'demo_personal',
+            type: cat.type,
+            emoji: subItem.emoji || cat.emoji,
+            major: cat.major,
+            sub: subItem.name,
+            sort_order: idx++,
+            is_archived: false,
+          });
+        });
+      });
+
+      const demoLedgers = [
+        {
+          id: 'demo_personal',
+          name: '我的個人帳本 (體驗模式)',
+          type: 'personal',
+          owner_id: 'demo_user',
+          memberIds: ['demo_user'],
+          members: { demo_user: { role: 'owner', email: 'demo@example.com', nickname: '我' } },
+          max_members: 1,
+          currency: 'TWD',
+          is_archived: false,
+        },
+        {
+          id: 'demo_couple',
+          name: '我們的小窩共同帳本 (體驗模式)',
+          type: 'couple',
+          owner_id: 'demo_user',
+          memberIds: ['demo_user', 'partner_user'],
+          members: {
+            demo_user: { role: 'owner', email: 'demo@example.com', nickname: '我' },
+            partner_user: { role: 'member', email: 'partner@example.com', nickname: '另一半' },
+          },
+          max_members: 5,
+          currency: 'TWD',
+          is_archived: false,
+        },
+      ];
+
+      const demoTransactions = [
+        {
+          id: 'demo_tx_1',
+          ledger_id: 'demo_personal',
+          type: 'income',
+          amount: 45000,
+          major_category: '收入',
+          sub_category: '其他',
+          date: `${ym}-05`,
+          item_name: '本月薪資',
+          note: '',
+          payment_method: '銀行轉帳',
+          payer_id: 'demo_user',
+          payer_nickname: '我',
+          created_ms: Date.now() - 300000,
+        },
+        {
+          id: 'demo_tx_2',
+          ledger_id: 'demo_personal',
+          type: 'expense',
+          amount: 135,
+          major_category: '吃吃喝喝',
+          sub_category: '午餐',
+          date: today,
+          item_name: '雞腿便當',
+          note: '',
+          payment_method: '現金',
+          payer_id: 'demo_user',
+          payer_nickname: '我',
+          created_ms: Date.now() - 200000,
+        },
+        {
+          id: 'demo_tx_3',
+          ledger_id: 'demo_personal',
+          type: 'expense',
+          amount: 65,
+          major_category: '吃吃喝喝',
+          sub_category: '飲料',
+          date: today,
+          item_name: '珍珠鮮奶茶',
+          note: '半糖少冰',
+          payment_method: '現金',
+          payer_id: 'demo_user',
+          payer_nickname: '我',
+          created_ms: Date.now() - 100000,
+        },
+        {
+          id: 'demo_tx_4',
+          ledger_id: 'demo_couple',
+          type: 'expense',
+          amount: 680,
+          major_category: '吃吃喝喝',
+          sub_category: '火鍋',
+          date: today,
+          item_name: '週末雙人小火鍋',
+          note: '共同晚餐',
+          payment_method: '信用卡',
+          payer_id: 'demo_user',
+          payer_nickname: '我',
+          created_ms: Date.now() - 50000,
+        },
+      ];
+
+      const demoPaymentMethods = DEFAULT_PAYMENT_METHODS.map((name, i) => ({
+        id: `demo_pm_${i}`,
+        ledger_id: 'demo_personal',
+        name,
+        is_active: true,
+      }));
+
+      return { demoCategories, demoLedgers, demoTransactions, demoPaymentMethods };
     }
 
     class ErrorBoundary extends React.Component {
@@ -312,7 +471,6 @@
       );
     }
 
-    // 拿鐵暖色系專屬月曆選擇彈跳窗
     function CustomDatePicker({ value, onChange, onClose }) {
       const todayStr = getTodayStr();
       const initialDate = value || todayStr;
@@ -320,7 +478,6 @@
       const [viewMonth, setViewMonth] = useState(() => parseInt(initialDate.slice(5, 7), 10) || (new Date().getMonth() + 1));
 
       function shiftDays(offset) {
-        // 每次點擊「前天／昨天／今天」都重新抓取當下真實的今天日期
         const currentToday = getTodayStr();
         const [y, m, day] = currentToday.split('-').map(Number);
         const d = new Date(Date.UTC(y, m - 1, day + offset));
@@ -451,7 +608,7 @@
       );
     }
 
-    function TransactionModal({ user, profile, activeLedger, currencySymbol = 'NT$', categories, paymentMethods, editingTx, showToast, onClose }) {
+    function TransactionModal({ isDemoMode, onDemoSaveTx, onDemoReorderCategories, user, profile, activeLedger, currencySymbol = 'NT$', categories, paymentMethods, editingTx, showToast, onClose }) {
       const [type, setType] = useState(editingTx?.type || 'expense');
       const [amountStr, setAmountStr] = useState(editingTx?.amount ? String(editingTx.amount) : '0');
       const [date, setDate] = useState(() => editingTx?.date || getTodayStr());
@@ -506,7 +663,6 @@
       const [dateModalOpen, setDateModalOpen] = useState(false);
       const [pmModalOpen, setPmModalOpen] = useState(false);
 
-      // 大分類與子分類長按拖曳排序狀態（長按觸發時間 1000ms = 1秒）
       const [orderedMajors, setOrderedMajors] = useState([]);
       const orderedMajorsRef = useRef([]);
       const [draggingMajor, setDraggingMajor] = useState(null);
@@ -541,6 +697,11 @@
 
       async function persistMajorOrder(newMajorOrder) {
         if (!Array.isArray(categories) || categories.length === 0) return;
+        if (isDemoMode) {
+          onDemoReorderCategories?.(type, newMajorOrder, null);
+          showToast('已更新大分類順序');
+          return;
+        }
         try {
           const db = firebase.firestore();
           const batch = db.batch();
@@ -606,6 +767,11 @@
 
       async function persistSubOrder(newSubList) {
         if (!Array.isArray(categories) || categories.length === 0) return;
+        if (isDemoMode) {
+          onDemoReorderCategories?.(type, null, newSubList);
+          showToast('已更新子分類順序');
+          return;
+        }
         try {
           const db = firebase.firestore();
           const batch = db.batch();
@@ -722,6 +888,28 @@
           return;
         }
 
+        const payload = {
+          ledger_id: activeLedger.id,
+          type,
+          amount: finalAmount,
+          major_category: selectedSubCat.major,
+          sub_category: selectedSubCat.sub,
+          date,
+          item_name: itemName.trim(),
+          note: note.trim(),
+          payment_method: paymentMethod,
+          payer_id: user.uid,
+          payer_nickname: profile?.nickname || (user.email ? user.email.split('@')[0] : '使用者'),
+          created_ms: editingTx?.created_ms || Date.now(),
+        };
+
+        if (isDemoMode) {
+          onDemoSaveTx(payload, editingTx?.id);
+          showToast(editingTx ? '已更新交易紀錄' : '已新增交易紀錄');
+          onClose();
+          return;
+        }
+
         setSaving(true);
         const db = firebase.firestore();
         try {
@@ -738,20 +926,7 @@
             });
             showToast('已更新交易紀錄');
           } else {
-            await db.collection('transactions').add({
-              ledger_id: activeLedger.id,
-              type,
-              amount: finalAmount,
-              major_category: selectedSubCat.major,
-              sub_category: selectedSubCat.sub,
-              date,
-              item_name: itemName.trim(),
-              note: note.trim(),
-              payment_method: paymentMethod,
-              payer_id: user.uid,
-              payer_nickname: profile?.nickname || (user.email ? user.email.split('@')[0] : '使用者'),
-              created_ms: Date.now(),
-            });
+            await db.collection('transactions').add(payload);
             showToast('已新增交易紀錄');
           }
           onClose();
@@ -764,15 +939,12 @@
 
       return (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end md:items-center justify-center p-0 md:p-4">
-          {/* 行動版保留專屬虛擬數字鍵盤，電腦版採用桌面表單雙欄設計，互不干擾 */}
           <div className="bg-white dark:bg-neutral-900 rounded-t-3xl md:rounded-3xl max-w-lg md:max-w-2xl w-full h-[645px] md:h-auto max-h-[95vh] p-4 sm:p-5 md:p-6 flex flex-col justify-between gap-2.5 md:gap-4 shadow-2xl overflow-hidden">
-            
             <div className="flex justify-between items-center shrink-0">
               <span className="text-base md:text-lg font-bold text-latte-800 dark:text-latte-100">{editingTx ? '編輯收支紀錄' : '新增收支紀錄'}</span>
               <button type="button" onClick={onClose} className="w-8 h-8 rounded-full text-neutral-400 hover:bg-latte-100 dark:hover:bg-neutral-800 flex items-center justify-center shrink-0">✕</button>
             </div>
 
-            {/* 類別選擇區塊：大分類改為橫向滾動單排，子分類維持垂直滾動網格 */}
             <div className="bg-latte-50 dark:bg-neutral-800/50 p-2.5 md:p-3.5 rounded-2xl space-y-2 shrink-0 border border-latte-200/60 dark:border-neutral-700/60">
               <div className="flex items-center justify-between px-0.5">
                 <div className="flex items-center gap-1.5">
@@ -786,7 +958,6 @@
                 )}
               </div>
 
-              {/* 大分類列表：單排橫向滾動（支援長按拖曳排序） */}
               <div
                 onTouchMove={handleMajorTouchMove}
                 onTouchEnd={handleMajorPointerUp}
@@ -826,7 +997,6 @@
                 })}
               </div>
 
-              {/* 子分類網格：固定高度，支援上下滾動與長按拖曳排序 */}
               <div
                 onTouchMove={handleSubTouchMove}
                 onTouchEnd={handleSubPointerUp}
@@ -870,7 +1040,6 @@
               </div>
             </div>
 
-            {/* 項目名稱與備註 */}
             <div className="grid grid-cols-2 gap-2.5 md:gap-3 shrink-0">
               <input
                 type="text"
@@ -888,7 +1057,6 @@
               />
             </div>
 
-            {/* 行動版：緊湊型金額顯示列 + 擴充空間後的 4x4 虛擬數字鍵盤 */}
             <div className="md:hidden flex flex-col gap-2.5 flex-1 min-h-0">
               <div className="bg-latte-100/70 dark:bg-neutral-800 px-3.5 py-2 rounded-2xl flex items-center justify-between border border-latte-200 dark:border-neutral-700 shrink-0">
                 <div className="min-w-0 flex items-baseline gap-2">
@@ -988,7 +1156,6 @@
               </div>
             </div>
 
-            {/* 電腦版專屬介面：隱藏虛擬鍵盤，改為清爽的實體鍵盤輸入欄位、付款方式、日期與操作鈕 */}
             <div className="hidden md:flex flex-col gap-4 pt-1">
               <div className="grid grid-cols-12 gap-3 items-end">
                 <div className="col-span-5">
@@ -1082,7 +1249,6 @@
             </div>
           </div>
 
-          {/* 拿鐵主題專屬日曆彈跳窗 */}
           {dateModalOpen && (
             <CustomDatePicker
               value={date}
@@ -1091,7 +1257,6 @@
             />
           )}
 
-          {/* 付款方式選擇彈跳窗 */}
           {pmModalOpen && (
             <div className="fixed inset-0 z-[60] bg-black/55 backdrop-blur-xs flex items-center justify-center p-4">
               <div className="bg-latte-50 dark:bg-neutral-800 rounded-3xl p-5 max-w-xs w-full space-y-3 shadow-2xl border border-latte-200 dark:border-neutral-700">
@@ -1126,7 +1291,7 @@
 
     function StatsView({ activeLedger, currencySymbol = 'NT$', selectedMonth, setSelectedMonth, allTransactions }) {
       const [statType, setStatType] = useState('expense');
-      const [periodMode, setPeriodMode] = useState('month'); // 'month' | 'year'
+      const [periodMode, setPeriodMode] = useState('month');
       const [selectedYear, setSelectedYear] = useState(() => (selectedMonth ? selectedMonth.slice(0, 4) : getTodayStr().slice(0, 4)));
 
       useEffect(() => {
@@ -1367,7 +1532,6 @@
 
       return (
         <div className="relative overflow-hidden bg-latte-100 dark:bg-neutral-900">
-          {/* 左滑露出的編輯與刪除按鈕 */}
           <div className="absolute inset-y-0 right-0 flex items-center">
             <button
               type="button"
@@ -1385,7 +1549,6 @@
             </button>
           </div>
 
-          {/* 前景明細卡片 */}
           <div
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
@@ -1425,7 +1588,6 @@
               <span className={`font-bold text-sm sm:text-base ${tx.type === 'income' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                 {tx.type === 'income' ? `+${currencySymbol}${Number(tx.amount).toLocaleString()}` : `-${currencySymbol}${Number(tx.amount).toLocaleString()}`}
               </span>
-              {/* 電腦版滑鼠懸停快捷操作 */}
               <div className="hidden md:flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button type="button" onClick={() => onEditClick(tx)} className="text-xs text-latte-600 dark:text-neutral-300 hover:underline px-1">編輯</button>
                 <button type="button" onClick={() => onDeleteClick(tx)} className="text-xs text-rose-600 hover:underline px-1">刪除</button>
@@ -1545,7 +1707,6 @@
             </div>
           )}
 
-          {/* 月度財務摘要：本月收入與支出縮小並排，本月結餘根據 (本月收入 - 本月支出) 顯示剩餘比例與紅/橘/綠三色進度條 */}
           <div className="space-y-2.5">
             <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
               <div className="p-3 sm:p-3.5 rounded-2xl bg-white dark:bg-neutral-800 border border-latte-200/80 dark:border-neutral-700 shadow-2xs">
@@ -1566,7 +1727,7 @@
               const remainingPct = hasIncome ? Math.round((summary.balance / summary.income) * 100) : (summary.balance < 0 ? 0 : 0);
               const clampedWidth = Math.max(0, Math.min(remainingPct, 100));
 
-              let statusZone = 'green'; // 'red' (<=20%), 'orange' (20%~45%), 'green' (>45%)
+              let statusZone = 'green';
               if (!hasIncome && summary.expense > 0) {
                 statusZone = 'red';
               } else if (remainingPct <= 20) {
@@ -1675,8 +1836,7 @@
       );
     }
 
-    // ==================== 預算管理系統 (預設摺疊子分類) ====================
-    function BudgetView({ activeLedger, currencySymbol, selectedMonth, setSelectedMonth, categories, transactions, budgetDoc, showToast }) {
+    function BudgetView({ isDemoMode, onDemoSaveBudget, activeLedger, currencySymbol, selectedMonth, setSelectedMonth, categories, transactions, budgetDoc, showToast }) {
       const [totalInput, setTotalInput] = useState(0);
       const [majorsInput, setMajorsInput] = useState({});
       const [subsInput, setSubsInput] = useState({});
@@ -1717,15 +1877,21 @@
 
       async function saveBudgets() {
         if (!activeLedger) return;
+        const payload = {
+          ledger_id: activeLedger.id,
+          month: selectedMonth,
+          total: Number(totalInput) || 0,
+          majors: majorsInput,
+          subs: subsInput,
+        };
+        if (isDemoMode) {
+          onDemoSaveBudget?.(`${activeLedger.id}_${selectedMonth}`, payload);
+          showToast('本月預算設定已儲存');
+          return;
+        }
         try {
           const budgetId = `${activeLedger.id}_${selectedMonth}`;
-          await firebase.firestore().collection('budgets').doc(budgetId).set({
-            ledger_id: activeLedger.id,
-            month: selectedMonth,
-            total: Number(totalInput) || 0,
-            majors: majorsInput,
-            subs: subsInput,
-          });
+          await firebase.firestore().collection('budgets').doc(budgetId).set(payload);
           showToast('本月預算設定已儲存');
         } catch (err) {
           showToast('儲存預算失敗：' + err.message);
@@ -1852,13 +2018,11 @@
       );
     }
 
-    // ==================== 設定、共同帳本、分類與付款方式管理 ====================
-    function SettingsView({ user, profile, ledgers, activeLedger, setActiveLedgerId, invitations, categories, paymentMethods, transactions, theme, setTheme, showToast, askConfirm, askPrompt, deferredPrompt, onInstallApp, isStandalone }) {
+    function SettingsView({ isDemoMode, onDemoUpdate, onOpenConfigModal, onExitDemo, user, profile, ledgers, activeLedger, setActiveLedgerId, invitations, categories, paymentMethods, transactions, theme, setTheme, showToast, askConfirm, askPrompt, onInstallApp, isStandalone }) {
       const [nicknameInput, setNicknameInput] = useState(profile?.nickname || '');
       const [newCoupleLedgerName, setNewCoupleLedgerName] = useState('');
       const [inviteEmail, setInviteEmail] = useState('');
 
-      // 行動版設定頁手風琴狀態：一次僅保留一種功能展開
       const [mobileExpandedSection, setMobileExpandedSection] = useState('profile');
       const toggleMobileSection = (sectionKey) => {
         setMobileExpandedSection((prev) => (prev === sectionKey ? '' : sectionKey));
@@ -1870,7 +2034,6 @@
       const [catSub, setCatSub] = useState('');
       const [newPmName, setNewPmName] = useState('');
 
-      // 類別編輯與長按排序狀態（長按觸發時間 1000ms = 1秒）
       const [editingCategory, setEditingCategory] = useState(null);
       const [editCatForm, setEditCatForm] = useState({ type: 'expense', emoji: '📝', major: '', sub: '' });
       const [orderedCats, setOrderedCats] = useState([]);
@@ -1891,6 +2054,11 @@
 
       async function saveNickname() {
         if (!nicknameInput.trim()) return;
+        if (isDemoMode) {
+          onDemoUpdate?.('nickname', nicknameInput.trim());
+          showToast('顯示暱稱已更新');
+          return;
+        }
         try {
           await firebase.firestore().collection('profiles').doc(user.uid).update({ nickname: nicknameInput.trim() });
           showToast('顯示暱稱已更新');
@@ -1909,6 +2077,11 @@
           defaultValue: ledger.name,
         });
         if (!newName || !newName.trim()) return;
+        if (isDemoMode) {
+          onDemoUpdate?.('ledgerName', { id: ledger.id, name: newName.trim() });
+          showToast('帳本名稱已更新');
+          return;
+        }
         try {
           await firebase.firestore().collection('ledgers').doc(ledger.id).update({
             name: newName.trim(),
@@ -1923,6 +2096,14 @@
       async function createCoupleLedger() {
         if (!newCoupleLedgerName.trim()) {
           showToast('請先輸入共同帳本名稱');
+          return;
+        }
+        if (isDemoMode) {
+          const newId = `demo_couple_${Date.now()}`;
+          onDemoUpdate?.('createCoupleLedger', { id: newId, name: newCoupleLedgerName.trim() });
+          setNewCoupleLedgerName('');
+          setActiveLedgerId(newId);
+          showToast('已建立情侶共同帳本');
           return;
         }
         try {
@@ -1982,6 +2163,11 @@
           showToast('請輸入邀請對象的 Google Email');
           return;
         }
+        if (isDemoMode) {
+          setInviteEmail('');
+          showToast('体験模式提示：已模擬發送邀請（連接 Firebase 後可真實跨帳號同步）');
+          return;
+        }
         if (!isOwner || activeLedger?.type !== 'couple') return;
         if ((activeLedger.memberIds || []).length >= 5) {
           showToast('共同帳本最多只能有 5 位成員（含擁有者）');
@@ -2005,6 +2191,7 @@
       }
 
       async function acceptInvitation(inv) {
+        if (isDemoMode) return;
         try {
           const db = firebase.firestore();
           const ledgerRef = db.collection('ledgers').doc(inv.ledger_id);
@@ -2032,6 +2219,7 @@
       }
 
       async function declineInvitation(inv) {
+        if (isDemoMode) return;
         const ok = await askConfirm({
           title: '拒絕共同帳本邀請',
           message: `確定要拒絕「${inv.inviter_nickname}」對共同帳本「${inv.ledger_name}」的邀請嗎？`,
@@ -2059,6 +2247,11 @@
           confirmText: '確認移除',
         });
         if (!ok) return;
+        if (isDemoMode) {
+          onDemoUpdate?.('removeMember', { ledgerId: activeLedger.id, targetUid });
+          showToast('已移除該成員');
+          return;
+        }
         try {
           const updatedMembers = { ...(activeLedger.members || {}) };
           delete updatedMembers[targetUid];
@@ -2080,6 +2273,11 @@
           confirmText: '確認變更',
         });
         if (!ok) return;
+        if (isDemoMode) {
+          onDemoUpdate?.('currency', { id: activeLedger.id, currency: newCode });
+          showToast(`幣別已變更為 ${newCode}`);
+          return;
+        }
         try {
           await firebase.firestore().collection('ledgers').doc(activeLedger.id).update({ currency: newCode });
           showToast(`幣別已變更為 ${newCode}`);
@@ -2089,6 +2287,11 @@
       }
 
       async function toggleArchiveLedger(ledger, archiveState) {
+        if (isDemoMode) {
+          onDemoUpdate?.('archiveLedger', { id: ledger.id, is_archived: archiveState });
+          showToast(archiveState ? '已封存帳本' : '已解除封存');
+          return;
+        }
         try {
           await firebase.firestore().collection('ledgers').doc(ledger.id).update({ is_archived: archiveState });
           showToast(archiveState ? '已封存帳本' : '已解除封存');
@@ -2113,6 +2316,12 @@
           confirmText: '確認永久刪除',
         });
         if (!ok2) return;
+
+        if (isDemoMode) {
+          onDemoUpdate?.('deleteLedger', { id: ledger.id });
+          showToast(`已永久刪除「${ledger.name}」`);
+          return;
+        }
 
         try {
           const db = firebase.firestore();
@@ -2140,17 +2349,24 @@
           showToast('請完整輸入大分類與子分類名稱');
           return;
         }
+        const maxOrder = orderedCats.reduce((max, item) => Math.max(max, Number(item.sort_order) || 0), orderedCats.length);
+        const newCat = {
+          ledger_id: activeLedger.id,
+          type: catType,
+          emoji: catEmoji.trim() || '📝',
+          major: catMajor.trim(),
+          sub: catSub.trim(),
+          sort_order: maxOrder + 1,
+          is_archived: false,
+        };
+        if (isDemoMode) {
+          onDemoUpdate?.('addCategory', { id: `demo_cat_${Date.now()}`, ...newCat });
+          setCatSub('');
+          showToast('已新增自訂分類');
+          return;
+        }
         try {
-          const maxOrder = orderedCats.reduce((max, item) => Math.max(max, Number(item.sort_order) || 0), orderedCats.length);
-          await firebase.firestore().collection('categories').add({
-            ledger_id: activeLedger.id,
-            type: catType,
-            emoji: catEmoji.trim() || '📝',
-            major: catMajor.trim(),
-            sub: catSub.trim(),
-            sort_order: maxOrder + 1,
-            is_archived: false,
-          });
+          await firebase.firestore().collection('categories').add(newCat);
           setCatSub('');
           showToast('已新增自訂分類');
         } catch (err) {
@@ -2175,13 +2391,20 @@
           showToast('請完整輸入大分類與子分類名稱');
           return;
         }
+        const updated = {
+          type: editCatForm.type,
+          emoji: editCatForm.emoji.trim() || '📝',
+          major: editCatForm.major.trim(),
+          sub: editCatForm.sub.trim(),
+        };
+        if (isDemoMode) {
+          onDemoUpdate?.('editCategory', { id: editingCategory.id, ...updated });
+          setEditingCategory(null);
+          showToast('已更新分類設定');
+          return;
+        }
         try {
-          await firebase.firestore().collection('categories').doc(editingCategory.id).update({
-            type: editCatForm.type,
-            emoji: editCatForm.emoji.trim() || '📝',
-            major: editCatForm.major.trim(),
-            sub: editCatForm.sub.trim(),
-          });
+          await firebase.firestore().collection('categories').doc(editingCategory.id).update(updated);
           setEditingCategory(null);
           showToast('已更新分類設定');
         } catch (err) {
@@ -2190,6 +2413,11 @@
       }
 
       async function persistCategoryOrder(listToSave) {
+        if (isDemoMode) {
+          onDemoUpdate?.('reorderCategories', listToSave);
+          showToast('已儲存分類順序');
+          return;
+        }
         try {
           const db = firebase.firestore();
           const batch = db.batch();
@@ -2255,6 +2483,11 @@
           confirmText: '確認刪除',
         });
         if (!ok) return;
+        if (isDemoMode) {
+          onDemoUpdate?.('deleteCategory', { id: cat.id });
+          showToast('已刪除該分類');
+          return;
+        }
         try {
           await firebase.firestore().collection('categories').doc(cat.id).delete();
           showToast('已刪除該分類');
@@ -2266,6 +2499,12 @@
       async function addPaymentMethod(e) {
         e.preventDefault();
         if (!activeLedger || !newPmName.trim()) return;
+        if (isDemoMode) {
+          onDemoUpdate?.('addPaymentMethod', { id: `demo_pm_${Date.now()}`, ledger_id: activeLedger.id, name: newPmName.trim(), is_active: true });
+          setNewPmName('');
+          showToast('已新增付款方式');
+          return;
+        }
         try {
           await firebase.firestore().collection('payment_methods').add({
             ledger_id: activeLedger.id,
@@ -2280,6 +2519,11 @@
       }
 
       async function togglePaymentMethodActive(pm) {
+        if (isDemoMode) {
+          onDemoUpdate?.('togglePaymentMethod', { id: pm.id });
+          showToast('付款方式狀態已更新');
+          return;
+        }
         try {
           await firebase.firestore().collection('payment_methods').doc(pm.id).update({ is_active: !pm.is_active });
           showToast('付款方式狀態已更新');
@@ -2321,6 +2565,22 @@
 
       return (
         <div className="space-y-4 md:space-y-6 text-sm">
+          {isDemoMode && (
+            <div className="p-4 rounded-2xl bg-latte-100 dark:bg-neutral-800 border border-latte-300 dark:border-neutral-600 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="font-bold text-latte-900 dark:text-white text-xs sm:text-sm">目前為單機體驗模式（資料暫存於瀏覽器記憶體）</div>
+                <div className="text-[11px] text-latte-600 dark:text-neutral-400 mt-0.5">連接 Firebase 雲端資料庫後，即可使用 Google 登入並與伴侶即時同步。</div>
+              </div>
+              <button
+                type="button"
+                onClick={onOpenConfigModal}
+                className="px-3.5 py-2 rounded-xl bg-latte-700 hover:bg-latte-800 text-white text-xs font-semibold transition"
+              >
+                設定 Firebase 雲端連線
+              </button>
+            </div>
+          )}
+
           {invitations.length > 0 && (
             <div className="p-5 rounded-2xl bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 space-y-3">
               <h3 className="font-bold text-base">收到共同帳本邀請</h3>
@@ -2348,7 +2608,6 @@
             </div>
           )}
 
-          {/* 1. 個人資料與顯示外觀設定（行動版可折疊，一次僅展開一項） */}
           <div className="bg-white dark:bg-neutral-800 rounded-2xl border border-latte-200 dark:border-neutral-700 overflow-hidden">
             <button
               type="button"
@@ -2414,7 +2673,6 @@
             </div>
           </div>
 
-          {/* 2. 帳本管理與情侶共同帳本（行動版可折疊，一次僅展開一項） */}
           <div className="bg-white dark:bg-neutral-800 rounded-2xl border border-latte-200 dark:border-neutral-700 overflow-hidden">
             <button
               type="button"
@@ -2513,7 +2771,6 @@
                 </div>
               )}
 
-              {/* 建立新的情侶共同帳本 */}
               <div className="space-y-2 pt-1">
                 <div className="text-xs font-semibold text-latte-700 dark:text-neutral-300">建立新的情侶 / 家庭共同帳本</div>
                 <div className="flex gap-2">
@@ -2534,7 +2791,6 @@
                 </div>
               </div>
 
-              {/* 所有帳本列表（我的個人帳本永遠排在最上方第一個） */}
               <div className="space-y-2 pt-2 border-t border-latte-100 dark:border-neutral-700">
                 <div className="text-xs font-semibold text-latte-700 dark:text-neutral-300">我的帳本列表</div>
                 <div className="space-y-2">
@@ -2617,7 +2873,6 @@
             </div>
           </div>
 
-          {/* 3. 自訂收支分類（行動版可折疊，一次僅展開一項） */}
           <div className="bg-white dark:bg-neutral-800 rounded-2xl border border-latte-200 dark:border-neutral-700 overflow-hidden">
             <button
               type="button"
@@ -2786,7 +3041,6 @@
             </div>
           )}
 
-          {/* 4. 付款方式管理（行動版可折疊，一次僅展開一項） */}
           <div className="bg-white dark:bg-neutral-800 rounded-2xl border border-latte-200 dark:border-neutral-700 overflow-hidden">
             <button
               type="button"
@@ -2821,7 +3075,6 @@
             </div>
           </div>
 
-          {/* 5. 交易明細資料匯出（行動版可折疊，一次僅展開一項） */}
           <div className="bg-white dark:bg-neutral-800 rounded-2xl border border-latte-200 dark:border-neutral-700 overflow-hidden">
             <button
               type="button"
@@ -2848,10 +3101,10 @@
 
           <button
             type="button"
-            onClick={() => firebase.auth().signOut()}
+            onClick={() => (isDemoMode ? onExitDemo?.() : firebase.auth().signOut())}
             className="md:hidden w-full py-3 rounded-xl border border-rose-300 text-rose-600 font-semibold"
           >
-            登出帳號
+            {isDemoMode ? '返回登入 / 雲端設定頁' : '登出帳號'}
           </button>
         </div>
       );
@@ -2894,7 +3147,7 @@
             title: '如何將「暖心記帳」安裝到手機桌面？',
             message: isIOS
               ? '【iPhone / iPad Safari 安裝步驟】\n1. 點擊瀏覽器底部正中央的「分享」按鈕（方框帶向上箭頭圖示）。\n2. 往下滑動選單，點擊「加入主畫面」。\n3. 點擊右上角「新增」即可在桌面看到專屬圖示！'
-              : '【Android / Chrome 安裝步驟】\n1. 點擊瀏覽器右上角的「⋮」（三個點選單）。\n2. 點擊「安裝應用程式」或「加到主畫面」。\n3. 確認安裝後即可在手機桌面獨立開啟！\n\n（註：請確認網站已部署於 HTTPS 網址，且專案資料夾內包含 icon.svg、manifest.json 與 sw.js）',
+              : '【Android / Chrome 安裝步驟】\n1. 點擊瀏覽器右上角的「⋮」（三個點選單）。\n2. 點擊「安裝應用程式」或「加到主畫面」。\n3. 確認安裝後即可在手機桌面獨立開啟！',
             confirmText: '我知道了',
           });
         }
@@ -2917,21 +3170,25 @@
         });
       }
 
-      const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'system');
+      const [theme, setTheme] = useState(() => safeStorage.get('theme', 'system'));
       useEffect(() => {
         const root = document.documentElement;
         const applyDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
         root.classList.toggle('dark', applyDark);
-        localStorage.setItem('theme', theme);
+        safeStorage.set('theme', theme);
       }, [theme]);
 
-      const [fbConfigText, setFbConfigText] = useState(() => localStorage.getItem('fb_config') || '');
+      const [fbConfigText, setFbConfigText] = useState(() => safeStorage.get('fb_config', ''));
       const [fbReady, setFbReady] = useState(false);
       const [configError, setConfigError] = useState('');
       const [configModalOpen, setConfigModalOpen] = useState(false);
       const [user, setUser] = useState(null);
       const [authLoading, setAuthLoading] = useState(true);
       const [authError, setAuthError] = useState('');
+
+      // 體驗模式狀態（當未設定 Firebase 或用戶想直接免登入體驗時使用）
+      const [isDemoMode, setIsDemoMode] = useState(false);
+      const demoSeed = useMemo(() => createDemoInitialData(), []);
 
       useEffect(() => {
         if (!fbConfigText) {
@@ -2945,6 +3202,11 @@
           return;
         }
         try {
+          if (typeof firebase === 'undefined') {
+            setConfigError('Firebase SDK 尚未載入，請檢查網路連線。');
+            setAuthLoading(false);
+            return;
+          }
           if (!firebase.apps.length) {
             firebase.initializeApp(parsed);
           }
@@ -2958,6 +3220,7 @@
           const unsub = firebase.auth().onAuthStateChanged(async (u) => {
             setUser(u);
             if (u) {
+              setIsDemoMode(false);
               try {
                 await ensureUserInitialized(u);
               } catch (e) {
@@ -3047,12 +3310,33 @@
       const [categories, setCategories] = useState([]);
       const [paymentMethods, setPaymentMethods] = useState([]);
       const [budgetDoc, setBudgetDoc] = useState(null);
+      const [demoBudgetsMap, setDemoBudgetsMap] = useState({});
 
       const [activeTab, setActiveTab] = useState('home');
       const [selectedMonth, setSelectedMonth] = useState(() => getYearMonthStr());
       const [customDateRange, setCustomDateRange] = useState({ enabled: false, start: '', end: '' });
 
-      // 當 PWA App 從背景切換回前景或跨過午夜 00:00 時，自動偵測並更新為最新月份
+      function enterDemoMode() {
+        setIsDemoMode(true);
+        setUser({ uid: 'demo_user', email: 'demo@example.com' });
+        setProfile({ uid: 'demo_user', email: 'demo@example.com', nickname: '我' });
+        setLedgers(demoSeed.demoLedgers);
+        setActiveLedgerId('demo_personal');
+        setTransactions(demoSeed.demoTransactions);
+        setCategories(demoSeed.demoCategories);
+        setPaymentMethods(demoSeed.demoPaymentMethods);
+        setBudgetDoc({ total: 15000, majors: { '吃吃喝喝': 8000 }, subs: {} });
+        showToast('已進入單機體驗模式，所有功能皆可直接操作');
+      }
+
+      function exitDemoMode() {
+        setIsDemoMode(false);
+        setUser(null);
+        setProfile(null);
+        setLedgers([]);
+        setTransactions([]);
+      }
+
       useEffect(() => {
         let lastTrackedDay = getTodayStr();
         const syncDateIfRolledOver = () => {
@@ -3075,7 +3359,7 @@
       const [editingTx, setEditingTx] = useState(null);
 
       useEffect(() => {
-        if (!user || !fbReady) return;
+        if (!user || !fbReady || isDemoMode) return;
         const db = firebase.firestore();
 
         const unsubProfile = db.collection('profiles').doc(user.uid).onSnapshot((doc) => {
@@ -3086,7 +3370,6 @@
           .where('memberIds', 'array-contains', user.uid)
           .onSnapshot((snap) => {
             const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-            // 我的個人帳本永遠排在最上方第一個
             list.sort((a, b) => {
               const aIsMyPersonal = a.type === 'personal' && a.owner_id === user.uid;
               const bIsMyPersonal = b.type === 'personal' && b.owner_id === user.uid;
@@ -3116,7 +3399,7 @@
           unsubLedgers();
           unsubInvites();
         };
-      }, [user, fbReady]);
+      }, [user, fbReady, isDemoMode]);
 
       const activeLedger = useMemo(() => ledgers.find((l) => l.id === activeLedgerId), [ledgers, activeLedgerId]);
       const currencySymbol = useMemo(() => {
@@ -3125,7 +3408,7 @@
       }, [activeLedger]);
 
       useEffect(() => {
-        if (!activeLedgerId || !fbReady) return;
+        if (!activeLedgerId || !fbReady || isDemoMode) return;
         const db = firebase.firestore();
 
         const unsubTx = db.collection('transactions')
@@ -3158,17 +3441,23 @@
           unsubCat();
           unsubPm();
         };
-      }, [activeLedgerId, fbReady]);
+      }, [activeLedgerId, fbReady, isDemoMode]);
 
       useEffect(() => {
-        if (!activeLedgerId || !selectedMonth || !fbReady) return;
+        if (!activeLedgerId || !selectedMonth) return;
+        if (isDemoMode) {
+          const bKey = `${activeLedgerId}_${selectedMonth}`;
+          setBudgetDoc(demoBudgetsMap[bKey] || { total: 15000, majors: { '吃吃喝喝': 8000 }, subs: {} });
+          return;
+        }
+        if (!fbReady) return;
         const db = firebase.firestore();
         const budgetId = `${activeLedgerId}_${selectedMonth}`;
         const unsub = db.collection('budgets').doc(budgetId).onSnapshot((doc) => {
           setBudgetDoc(doc.exists ? doc.data() : { total: 0, majors: {}, subs: {} });
         });
         return () => unsub();
-      }, [activeLedgerId, selectedMonth, fbReady]);
+      }, [activeLedgerId, selectedMonth, fbReady, isDemoMode, demoBudgetsMap]);
 
       async function handleGoogleLogin() {
         setAuthError('');
@@ -3194,8 +3483,13 @@
         }
       }
 
+      const ledgerTransactions = useMemo(() => {
+        if (!isDemoMode) return transactions;
+        return transactions.filter((t) => t.ledger_id === activeLedgerId);
+      }, [transactions, isDemoMode, activeLedgerId]);
+
       const periodTransactions = useMemo(() => {
-        return transactions.filter((tx) => {
+        return ledgerTransactions.filter((tx) => {
           if (customDateRange.enabled) {
             if (customDateRange.start && tx.date < customDateRange.start) return false;
             if (customDateRange.end && tx.date > customDateRange.end) return false;
@@ -3203,7 +3497,7 @@
           }
           return tx.date && tx.date.startsWith(selectedMonth);
         });
-      }, [transactions, selectedMonth, customDateRange]);
+      }, [ledgerTransactions, selectedMonth, customDateRange]);
 
       const summary = useMemo(() => {
         let income = 0;
@@ -3291,6 +3585,14 @@
                   >
                     <span>使用 Google 帳號登入</span>
                   </button>
+
+                  <button
+                    type="button"
+                    onClick={enterDemoMode}
+                    className="w-full py-3 px-5 rounded-2xl bg-latte-100 hover:bg-latte-200/80 dark:bg-neutral-700 dark:hover:bg-neutral-600 text-latte-800 dark:text-neutral-100 font-semibold text-xs sm:text-sm transition flex items-center justify-center gap-2 border border-latte-200 dark:border-neutral-600"
+                  >
+                    <span>免登入直接進入體驗模式</span>
+                  </button>
                 </div>
               </div>
             </main>
@@ -3328,7 +3630,7 @@
                       <button
                         type="button"
                         onClick={() => {
-                          localStorage.removeItem('fb_config');
+                          safeStorage.remove('fb_config');
                           window.location.reload();
                         }}
                         className="px-3.5 py-2.5 rounded-xl border border-rose-300 text-rose-600 text-xs font-medium mr-auto"
@@ -3346,7 +3648,7 @@
                     <button
                       type="button"
                       onClick={() => {
-                        localStorage.setItem('fb_config', fbConfigText);
+                        safeStorage.set('fb_config', fbConfigText);
                         window.location.reload();
                       }}
                       className="px-5 py-2.5 rounded-xl bg-latte-600 hover:bg-latte-700 text-white text-xs font-semibold transition"
@@ -3386,7 +3688,6 @@
             }}
           />
 
-          {/* 電腦版左側側邊欄 */}
           <aside className="hidden md:flex md:w-68 md:flex-col bg-latte-100/80 dark:bg-neutral-800/90 border-r border-latte-200/80 dark:border-neutral-700/80 p-5 justify-between shrink-0 shadow-xs">
             <div className="space-y-5">
               <div>
@@ -3427,15 +3728,14 @@
             <div className="pt-4 border-t border-latte-200/60 dark:border-neutral-700/60 space-y-2.5 text-xs text-latte-600 dark:text-neutral-400">
               <div className="px-1 truncate font-medium">暱稱：{profile?.nickname}</div>
               <button
-                onClick={() => firebase.auth().signOut()}
+                onClick={() => (isDemoMode ? exitDemoMode() : firebase.auth().signOut())}
                 className="w-full py-2.5 rounded-xl border border-latte-300 dark:border-neutral-600 hover:bg-latte-200/60 dark:hover:bg-neutral-700 text-center font-medium transition"
               >
-                登出帳號
+                {isDemoMode ? '返回登入 / 雲端設定' : '登出帳號'}
               </button>
             </div>
           </aside>
 
-          {/* 手機版頂部帳本切換列 */}
           <header className="md:hidden sticky top-0 z-20 bg-latte-50/95 dark:bg-neutral-900/95 backdrop-blur-md border-b border-latte-200/70 dark:border-neutral-800 px-3 py-2.5 flex items-center justify-center shadow-2xs">
             <select
               value={activeLedgerId}
@@ -3494,6 +3794,11 @@
                     confirmText: '確認刪除',
                   });
                   if (ok) {
+                    if (isDemoMode) {
+                      setTransactions((prev) => prev.filter((item) => item.id !== tx.id));
+                      showToast('已刪除該筆收支紀錄');
+                      return;
+                    }
                     try {
                       await firebase.firestore().collection('transactions').doc(tx.id).delete();
                       showToast('已刪除該筆收支紀錄');
@@ -3511,18 +3816,20 @@
                 currencySymbol={currencySymbol}
                 selectedMonth={selectedMonth}
                 setSelectedMonth={setSelectedMonth}
-                allTransactions={transactions}
+                allTransactions={ledgerTransactions}
               />
             )}
 
             {activeTab === 'budgets' && activeLedger && (
               <BudgetView
+                isDemoMode={isDemoMode}
+                onDemoSaveBudget={(bKey, data) => setDemoBudgetsMap((prev) => ({ ...prev, [bKey]: data }))}
                 activeLedger={activeLedger}
                 currencySymbol={currencySymbol}
                 selectedMonth={selectedMonth}
                 setSelectedMonth={setSelectedMonth}
                 categories={categories}
-                transactions={transactions.filter((t) => t.date && t.date.startsWith(selectedMonth) && t.type === 'expense')}
+                transactions={ledgerTransactions.filter((t) => t.date && t.date.startsWith(selectedMonth) && t.type === 'expense')}
                 budgetDoc={budgetDoc}
                 showToast={showToast}
               />
@@ -3530,6 +3837,66 @@
 
             {activeTab === 'settings' && (
               <SettingsView
+                isDemoMode={isDemoMode}
+                onOpenConfigModal={() => {
+                  exitDemoMode();
+                  setConfigModalOpen(true);
+                }}
+                onExitDemo={exitDemoMode}
+                onDemoUpdate={(action, payload) => {
+                  if (action === 'nickname') {
+                    setProfile((prev) => ({ ...prev, nickname: payload }));
+                  } else if (action === 'ledgerName') {
+                    setLedgers((prev) => prev.map((l) => (l.id === payload.id ? { ...l, name: payload.name } : l)));
+                  } else if (action === 'currency') {
+                    setLedgers((prev) => prev.map((l) => (l.id === payload.id ? { ...l, currency: payload.currency } : l)));
+                  } else if (action === 'createCoupleLedger') {
+                    setLedgers((prev) => [
+                      ...prev,
+                      {
+                        id: payload.id,
+                        name: payload.name,
+                        type: 'couple',
+                        owner_id: user.uid,
+                        memberIds: [user.uid],
+                        members: { [user.uid]: { role: 'owner', email: user.email, nickname: profile?.nickname || '我' } },
+                        max_members: 5,
+                        currency: 'TWD',
+                        is_archived: false,
+                      },
+                    ]);
+                  } else if (action === 'archiveLedger') {
+                    setLedgers((prev) => prev.map((l) => (l.id === payload.id ? { ...l, is_archived: payload.is_archived } : l)));
+                  } else if (action === 'deleteLedger') {
+                    setLedgers((prev) => prev.filter((l) => l.id !== payload.id));
+                    if (activeLedgerId === payload.id) setActiveLedgerId('demo_personal');
+                  } else if (action === 'removeMember') {
+                    setLedgers((prev) =>
+                      prev.map((l) => {
+                        if (l.id !== payload.ledgerId) return l;
+                        const nextMembers = { ...l.members };
+                        delete nextMembers[payload.targetUid];
+                        return {
+                          ...l,
+                          memberIds: (l.memberIds || []).filter((id) => id !== payload.targetUid),
+                          members: nextMembers,
+                        };
+                      })
+                    );
+                  } else if (action === 'addCategory') {
+                    setCategories((prev) => [...prev, payload]);
+                  } else if (action === 'editCategory') {
+                    setCategories((prev) => prev.map((c) => (c.id === payload.id ? { ...c, ...payload } : c)));
+                  } else if (action === 'deleteCategory') {
+                    setCategories((prev) => prev.filter((c) => c.id !== payload.id));
+                  } else if (action === 'reorderCategories') {
+                    setCategories(payload.map((item, idx) => ({ ...item, sort_order: idx })));
+                  } else if (action === 'addPaymentMethod') {
+                    setPaymentMethods((prev) => [...prev, payload]);
+                  } else if (action === 'togglePaymentMethod') {
+                    setPaymentMethods((prev) => prev.map((pm) => (pm.id === payload.id ? { ...pm, is_active: !pm.is_active } : pm)));
+                  }
+                }}
                 user={user}
                 profile={profile}
                 ledgers={ledgers}
@@ -3538,7 +3905,7 @@
                 invitations={invitations}
                 categories={categories}
                 paymentMethods={paymentMethods}
-                transactions={transactions}
+                transactions={ledgerTransactions}
                 theme={theme}
                 setTheme={setTheme}
                 showToast={showToast}
@@ -3551,7 +3918,6 @@
             )}
           </main>
 
-          {/* 手機版底部適度調降高度的導覽列與精緻 SVG 功能圖示 */}
           <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md border-t border-latte-200/80 dark:border-neutral-800 h-20 px-2 flex items-center justify-between shadow-xl">
             <button
               type="button"
@@ -3578,8 +3944,7 @@
                 <path d="M22 12A10 10 0 0 0 12 2v10z" />
               </svg>
             </button>
-            
-            {/* 置中橫向橢圓「+ 記帳」按鈕 */}
+
             <div className="px-2 flex items-center justify-center shrink-0">
               <button
                 type="button"
@@ -3629,6 +3994,35 @@
 
           {txModalOpen && activeLedger && (
             <TransactionModal
+              isDemoMode={isDemoMode}
+              onDemoSaveTx={(payload, editId) => {
+                if (editId) {
+                  setTransactions((prev) => prev.map((t) => (t.id === editId ? { ...t, ...payload } : t)));
+                } else {
+                  setTransactions((prev) => [{ id: `demo_tx_${Date.now()}`, ...payload }, ...prev]);
+                }
+              }}
+              onDemoReorderCategories={(targetType, newMajorOrder, newSubList) => {
+                setCategories((prev) => {
+                  if (newMajorOrder) {
+                    const orderMap = new Map(newMajorOrder.map((m, i) => [m, i]));
+                    return [...prev].sort((a, b) => {
+                      if (a.type !== targetType || b.type !== targetType) return 0;
+                      return (orderMap.get(a.major) ?? 99) - (orderMap.get(b.major) ?? 99);
+                    });
+                  }
+                  if (newSubList) {
+                    const subOrderMap = new Map(newSubList.map((s, i) => [s.id, i]));
+                    return [...prev].sort((a, b) => {
+                      const ai = subOrderMap.get(a.id);
+                      const bi = subOrderMap.get(b.id);
+                      if (ai !== undefined && bi !== undefined) return ai - bi;
+                      return 0;
+                    });
+                  }
+                  return prev;
+                });
+              }}
               user={user}
               profile={profile}
               activeLedger={activeLedger}
@@ -3650,15 +4044,6 @@
         <App />
       </ErrorBoundary>
     );
-
-    // 註冊 PWA Service Worker
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js').catch((err) => {
-          console.warn('Service Worker 註冊失敗:', err);
-        });
-      });
-    }
   </script>
 </body>
 </html>
