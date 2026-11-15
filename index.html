@@ -46,6 +46,20 @@
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC", sans-serif; }
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    /* 全站下拉式選單自訂 SVG 拿鐵色箭頭與右側留白 */
+    select {
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%237D654D' stroke-width='2.3'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0.65rem center;
+      background-size: 0.95rem 0.95rem;
+      padding-right: 2.1rem !important;
+    }
+    .dark select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23D4C5B4' stroke-width='2.3'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+    }
   </style>
 </head>
 <body class="bg-latte-50 text-latte-900 dark:bg-neutral-900 dark:text-latte-100 transition-colors">
@@ -471,7 +485,7 @@
       );
     }
 
-    function CustomDatePicker({ value, onChange, onClose }) {
+    function CustomDatePicker({ value, onChange, onClose, title = '選擇記帳日期' }) {
       const todayStr = getTodayStr();
       const initialDate = value || todayStr;
       const [viewYear, setViewYear] = useState(() => parseInt(initialDate.slice(0, 4), 10) || new Date().getFullYear());
@@ -523,7 +537,7 @@
         <div className="fixed inset-0 z-[60] bg-black/55 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-latte-50 dark:bg-neutral-800 rounded-3xl p-5 max-w-xs w-full space-y-3.5 shadow-2xl border border-latte-200 dark:border-neutral-700">
             <div className="flex items-center justify-between">
-              <h3 className="font-bold text-base text-latte-900 dark:text-white">選擇記帳日期</h3>
+              <h3 className="font-bold text-base text-latte-900 dark:text-white">{title}</h3>
               <button
                 type="button"
                 onClick={onClose}
@@ -1555,29 +1569,29 @@
             onTouchEnd={handleTouchEnd}
             onClick={() => { if (offsetX !== 0) setOffsetX(0); }}
             style={{ transform: `translateX(${offsetX}px)` }}
-            className="relative bg-white dark:bg-neutral-800 px-5 py-3.5 flex items-center justify-between gap-3 transition-transform duration-150 group"
+            className="relative bg-white dark:bg-neutral-800 px-5 py-4 flex items-center justify-between gap-3 transition-transform duration-150 group"
           >
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-10 h-10 rounded-2xl bg-latte-100 dark:bg-neutral-700 flex items-center justify-center text-lg shrink-0">
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="w-11 h-11 rounded-2xl bg-latte-100 dark:bg-neutral-700 flex items-center justify-center text-xl shrink-0">
                 {categoryEmoji || '📝'}
               </div>
-              <div className="space-y-0.5 min-w-0">
+              <div className="space-y-1 min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="font-bold text-xs sm:text-sm text-latte-900 dark:text-white">
+                  <span className="font-bold text-[16px] leading-snug text-latte-900 dark:text-white">
                     {tx.sub_category}
                   </span>
                   {tx.item_name && (
-                    <span className="text-xs sm:text-sm text-latte-700 dark:text-neutral-300 truncate">
+                    <span className="text-[16px] leading-snug text-latte-700 dark:text-neutral-300 truncate">
                       · {tx.item_name}
                     </span>
                   )}
                   {activeLedger?.type === 'couple' && (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300">
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300">
                       {tx.payer_nickname}
                     </span>
                   )}
                 </div>
-                <div className="text-[11px] text-latte-500 dark:text-neutral-400 flex gap-2 flex-wrap">
+                <div className="text-xs text-latte-500 dark:text-neutral-400 flex gap-2.5 flex-wrap">
                   <span>{tx.payment_method}</span>
                   {tx.note && <span className="truncate">備註：{tx.note}</span>}
                 </div>
@@ -1585,7 +1599,7 @@
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
-              <span className={`font-bold text-sm sm:text-base ${tx.type === 'income' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+              <span className={`font-bold text-[16px] leading-snug ${tx.type === 'income' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                 {tx.type === 'income' ? `+${currencySymbol}${Number(tx.amount).toLocaleString()}` : `-${currencySymbol}${Number(tx.amount).toLocaleString()}`}
               </span>
               <div className="hidden md:flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1600,6 +1614,7 @@
 
     function HomeView({ activeLedger, currencySymbol, selectedMonth, setSelectedMonth, customDateRange, setCustomDateRange, summary, transactions, categories, onAddClick, onEditClick, onDeleteClick }) {
       const [showCustom, setShowCustom] = useState(false);
+      const [rangePickerTarget, setRangePickerTarget] = useState(null); // 'start' | 'end' | null
 
       const emojiMap = useMemo(() => {
         const map = {};
@@ -1689,22 +1704,47 @@
           </div>
 
           {showCustom && (
-            <div className="p-3.5 rounded-2xl bg-white dark:bg-neutral-800 border border-latte-200 dark:border-neutral-700 flex flex-wrap items-center gap-2.5 text-xs">
-              <span>起始：</span>
-              <input
-                type="date"
-                value={customDateRange.start}
-                onChange={(e) => setCustomDateRange({ ...customDateRange, enabled: true, start: e.target.value })}
-                className="p-1.5 rounded-lg border dark:bg-neutral-700 dark:border-neutral-600"
-              />
-              <span>結束：</span>
-              <input
-                type="date"
-                value={customDateRange.end}
-                onChange={(e) => setCustomDateRange({ ...customDateRange, enabled: true, end: e.target.value })}
-                className="p-1.5 rounded-lg border dark:bg-neutral-700 dark:border-neutral-600"
-              />
+            <div className="p-2.5 sm:p-3 rounded-2xl bg-latte-100/80 dark:bg-neutral-800 border border-latte-200 dark:border-neutral-700 flex items-center gap-1.5 sm:gap-2 flex-nowrap overflow-x-auto no-scrollbar text-xs">
+              <button
+                type="button"
+                onClick={() => setRangePickerTarget('start')}
+                className="flex-1 min-w-0 px-2.5 py-2 rounded-xl bg-white dark:bg-neutral-700 border border-latte-300 dark:border-neutral-600 text-latte-800 dark:text-neutral-100 font-semibold flex items-center justify-between gap-1 whitespace-nowrap shadow-2xs hover:bg-latte-50 transition"
+              >
+                <span className="text-latte-500 dark:text-neutral-400 shrink-0">起始</span>
+                <span className="truncate">{customDateRange.start || '選擇日期'}</span>
+              </button>
+              <span className="text-latte-400 font-bold shrink-0">~</span>
+              <button
+                type="button"
+                onClick={() => setRangePickerTarget('end')}
+                className="flex-1 min-w-0 px-2.5 py-2 rounded-xl bg-white dark:bg-neutral-700 border border-latte-300 dark:border-neutral-600 text-latte-800 dark:text-neutral-100 font-semibold flex items-center justify-between gap-1 whitespace-nowrap shadow-2xs hover:bg-latte-50 transition"
+              >
+                <span className="text-latte-500 dark:text-neutral-400 shrink-0">結束</span>
+                <span className="truncate">{customDateRange.end || '選擇日期'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCustomDateRange({ enabled: false, start: '', end: '' })}
+                className="px-2.5 py-2 rounded-xl bg-latte-200/80 dark:bg-neutral-700 hover:bg-latte-300/80 text-latte-700 dark:text-neutral-200 font-semibold whitespace-nowrap shrink-0 transition"
+              >
+                清除
+              </button>
             </div>
+          )}
+
+          {rangePickerTarget && (
+            <CustomDatePicker
+              title={rangePickerTarget === 'start' ? '選擇起始日期' : '選擇結束日期'}
+              value={rangePickerTarget === 'start' ? customDateRange.start : customDateRange.end}
+              onChange={(pickedDate) => {
+                setCustomDateRange((prev) => ({
+                  ...prev,
+                  enabled: true,
+                  [rangePickerTarget]: pickedDate,
+                }));
+              }}
+              onClose={() => setRangePickerTarget(null)}
+            />
           )}
 
           <div className="space-y-2.5">
@@ -1791,16 +1831,16 @@
           </div>
 
           <div className="bg-white dark:bg-neutral-800 rounded-2xl border border-latte-200/80 dark:border-neutral-700 overflow-hidden shadow-2xs">
-            <div className="px-5 py-3.5 border-b border-latte-100 dark:border-neutral-700/80 font-semibold text-xs sm:text-sm flex justify-between">
+            <div className="px-5 py-3.5 border-b border-latte-100 dark:border-neutral-700/80 font-semibold text-sm flex justify-between">
               <span>收支明細（共 {transactions.length} 筆）</span>
             </div>
             {transactions.length === 0 ? (
-              <div className="p-8 text-center text-xs sm:text-sm text-latte-500 dark:text-neutral-400">此期間尚無收支紀錄</div>
+              <div className="p-8 text-center text-sm text-latte-500 dark:text-neutral-400">此期間尚無收支紀錄</div>
             ) : (
               <div>
                 {groupedTransactions.map((group) => (
                   <div key={group.date}>
-                    <div className="px-5 py-2 bg-latte-100/80 dark:bg-neutral-700/60 border-y border-latte-200/60 dark:border-neutral-700 flex items-center justify-between text-[11px] sm:text-xs font-semibold text-latte-700 dark:text-neutral-200">
+                    <div className="px-5 py-2.5 bg-latte-100/80 dark:bg-neutral-700/60 border-y border-latte-200/60 dark:border-neutral-700 flex items-center justify-between text-xs sm:text-sm font-semibold text-latte-700 dark:text-neutral-200">
                       <div className="flex items-center gap-2">
                         <span>{group.date}</span>
                         {group.weekLabel && <span className="text-latte-500 dark:text-neutral-400 font-normal">{group.weekLabel}</span>}
@@ -2022,6 +2062,9 @@
       const [nicknameInput, setNicknameInput] = useState(profile?.nickname || '');
       const [newCoupleLedgerName, setNewCoupleLedgerName] = useState('');
       const [inviteEmail, setInviteEmail] = useState('');
+
+      const csvFileInputRef = useRef(null);
+      const jsonFileInputRef = useRef(null);
 
       const [mobileExpandedSection, setMobileExpandedSection] = useState('profile');
       const toggleMobileSection = (sectionKey) => {
@@ -2560,6 +2603,189 @@
         showToast('已匯出 CSV 交易明細');
       }
 
+      function parseCsvLine(line) {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+          const ch = line[i];
+          if (ch === '"') {
+            if (inQuotes && line[i + 1] === '"') {
+              current += '"';
+              i++;
+            } else {
+              inQuotes = !inQuotes;
+            }
+          } else if (ch === ',' && !inQuotes) {
+            result.push(current);
+            current = '';
+          } else {
+            current += ch;
+          }
+        }
+        result.push(current);
+        return result.map((s) => s.trim());
+      }
+
+      async function handleImportCsvFile(e) {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        if (!file || !activeLedger) return;
+        try {
+          const text = await file.text();
+          const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).filter((l) => l.trim());
+          if (lines.length < 2) {
+            showToast('CSV 檔案內容為空或缺少資料列');
+            return;
+          }
+          const importedList = [];
+          const myNick = profile?.nickname || (user.email ? user.email.split('@')[0] : '使用者');
+          for (let i = 1; i < lines.length; i++) {
+            const cols = parseCsvLine(lines[i]);
+            if (cols.length < 6) continue;
+            const [dateCol, typeCol, majorCol, subCol, itemCol, amtCol, pmCol, payerCol, noteCol] = cols;
+            const amount = parseFloat(String(amtCol).replace(/[^0-9.-]/g, ''));
+            if (!dateCol || isNaN(amount) || amount <= 0) continue;
+            importedList.push({
+              ledger_id: activeLedger.id,
+              type: typeCol === '收入' || typeCol === 'income' ? 'income' : 'expense',
+              amount,
+              major_category: majorCol || '吃吃喝喝',
+              sub_category: subCol || '其他',
+              date: dateCol.slice(0, 10),
+              item_name: itemCol || '',
+              payment_method: pmCol || '現金',
+              payer_id: user.uid,
+              payer_nickname: payerCol || myNick,
+              note: noteCol || '',
+              created_ms: Date.now() + i,
+            });
+          }
+          if (importedList.length === 0) {
+            showToast('未解析到有效的收支紀錄，請確認 CSV 格式');
+            return;
+          }
+          const ok = await askConfirm({
+            title: '確認匯入 CSV 報表',
+            message: `共解析出 ${importedList.length} 筆收支紀錄，確定匯入至「${activeLedger.name}」嗎？`,
+            confirmText: '確認匯入',
+          });
+          if (!ok) return;
+
+          if (isDemoMode) {
+            onDemoUpdate?.('importTransactions', importedList.map((item, idx) => ({ id: `demo_imp_${Date.now()}_${idx}`, ...item })));
+            showToast(`已成功匯入 ${importedList.length} 筆紀錄`);
+            return;
+          }
+
+          const db = firebase.firestore();
+          for (let i = 0; i < importedList.length; i += 400) {
+            const batch = db.batch();
+            importedList.slice(i, i + 400).forEach((item) => {
+              batch.set(db.collection('transactions').doc(), item);
+            });
+            await batch.commit();
+          }
+          showToast(`已成功匯入 ${importedList.length} 筆紀錄`);
+        } catch (err) {
+          showToast('匯入 CSV 失敗：' + err.message);
+        }
+      }
+
+      function exportJsonBackup() {
+        if (!activeLedger) return;
+        const backupPayload = {
+          version: 1,
+          exported_at: new Date().toISOString(),
+          ledger: {
+            name: activeLedger.name,
+            type: activeLedger.type,
+            currency: activeLedger.currency || 'TWD',
+          },
+          categories: (categories || []).map(({ id, ledger_id, ...rest }) => rest),
+          payment_methods: (paymentMethods || []).map(({ id, ledger_id, ...rest }) => rest),
+          transactions: (transactions || []).map(({ id, ledger_id, ...rest }) => rest),
+        };
+        const blob = new Blob([JSON.stringify(backupPayload, null, 2)], { type: 'application/json;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${activeLedger.name}_完整備份_${getTodayStr()}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('已匯出 JSON 完整備份檔');
+      }
+
+      async function handleRestoreJsonBackup(e) {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        if (!file || !activeLedger) return;
+        try {
+          const text = await file.text();
+          const parsed = JSON.parse(text);
+          if (!parsed || !Array.isArray(parsed.transactions)) {
+            showToast('無效的 JSON 備份檔案格式');
+            return;
+          }
+          const txCount = parsed.transactions.length;
+          const catCount = Array.isArray(parsed.categories) ? parsed.categories.length : 0;
+          const pmCount = Array.isArray(parsed.payment_methods) ? parsed.payment_methods.length : 0;
+
+          const ok = await askConfirm({
+            title: '還原 JSON 備份資料',
+            message: `偵測到備份檔包含：\n• 收支紀錄：${txCount} 筆\n• 自訂分類：${catCount} 項\n• 付款方式：${pmCount} 項\n\n確定要將這些資料還原合併至「${activeLedger.name}」嗎？`,
+            confirmText: '開始還原',
+          });
+          if (!ok) return;
+
+          const myNick = profile?.nickname || (user.email ? user.email.split('@')[0] : '使用者');
+          const restoredTxs = parsed.transactions.map((t, idx) => ({
+            ...t,
+            ledger_id: activeLedger.id,
+            payer_id: t.payer_id || user.uid,
+            payer_nickname: t.payer_nickname || myNick,
+            created_ms: t.created_ms || (Date.now() + idx),
+          }));
+
+          const existingCatKeys = new Set((categories || []).map((c) => `${c.type}::${c.major}::${c.sub}`));
+          const restoredCats = (parsed.categories || [])
+            .filter((c) => !existingCatKeys.has(`${c.type}::${c.major}::${c.sub}`))
+            .map((c, idx) => ({ ...c, ledger_id: activeLedger.id, sort_order: (categories?.length || 0) + idx }));
+
+          const existingPmNames = new Set((paymentMethods || []).map((p) => p.name));
+          const restoredPms = (parsed.payment_methods || [])
+            .filter((p) => p.name && !existingPmNames.has(p.name))
+            .map((p) => ({ ...p, ledger_id: activeLedger.id }));
+
+          if (isDemoMode) {
+            onDemoUpdate?.('restoreJsonBackup', {
+              transactions: restoredTxs.map((t, i) => ({ id: `demo_res_tx_${Date.now()}_${i}`, ...t })),
+              categories: restoredCats.map((c, i) => ({ id: `demo_res_cat_${Date.now()}_${i}`, ...c })),
+              paymentMethods: restoredPms.map((p, i) => ({ id: `demo_res_pm_${Date.now()}_${i}`, ...p })),
+            });
+            showToast(`已成功還原 ${restoredTxs.length} 筆交易與設定`);
+            return;
+          }
+
+          const db = firebase.firestore();
+          const allOps = [
+            ...restoredTxs.map((data) => ({ col: 'transactions', data })),
+            ...restoredCats.map((data) => ({ col: 'categories', data })),
+            ...restoredPms.map((data) => ({ col: 'payment_methods', data })),
+          ];
+          for (let i = 0; i < allOps.length; i += 400) {
+            const batch = db.batch();
+            allOps.slice(i, i + 400).forEach((op) => {
+              batch.set(db.collection(op.col).doc(), op.data);
+            });
+            await batch.commit();
+          }
+          showToast(`已成功還原 ${restoredTxs.length} 筆交易與相關設定`);
+        } catch (err) {
+          showToast('還原 JSON 備份失敗：' + err.message);
+        }
+      }
+
       const activeLedgersList = ledgers.filter((l) => !l.is_archived);
       const archivedLedgersList = ledgers.filter((l) => l.is_archived);
 
@@ -2690,7 +2916,7 @@
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <div className="text-[11px] text-latte-500 dark:text-neutral-400">
-                        目前檢視帳本（{activeLedger.type === 'couple' ? '💑 共同帳本' : '👤 個人帳本'}）
+                        目前檢視帳本（{activeLedger.type === 'couple' ? '共同帳本' : '個人帳本'}）
                       </div>
                       <div className="font-bold text-base text-latte-900 dark:text-white flex items-center gap-2">
                         <span>{activeLedger.name}</span>
@@ -2798,7 +3024,10 @@
                     <div key={l.id} className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl border border-latte-200 dark:border-neutral-700 bg-latte-50/50 dark:bg-neutral-800">
                       <div className="flex items-center gap-2">
                         <span className="font-semibold text-xs sm:text-sm">
-                          {l.type === 'couple' ? '💑' : '👤'} {l.name}
+                          {l.name}
+                        </span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-latte-200/70 dark:bg-neutral-700 text-latte-700 dark:text-neutral-300">
+                          {l.type === 'couple' ? '共同' : '個人'}
                         </span>
                         {l.id === activeLedger?.id && (
                           <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">
@@ -2844,7 +3073,7 @@
                     <div className="text-xs font-semibold text-latte-500">已封存帳本</div>
                     {archivedLedgersList.map((l) => (
                       <div key={l.id} className="flex items-center justify-between gap-2 p-3 rounded-xl border border-latte-200/70 dark:border-neutral-700 opacity-75 text-xs">
-                        <span>{l.type === 'couple' ? '💑' : '👤'} {l.name}</span>
+                        <span>{l.name}（{l.type === 'couple' ? '共同' : '個人'}）</span>
                         <div className="flex items-center gap-2">
                           {l.owner_id === user.uid && (
                             <>
@@ -3081,21 +3310,58 @@
               onClick={() => toggleMobileSection('export')}
               className="md:hidden w-full p-4 flex items-center justify-between text-left font-bold text-base text-latte-900 dark:text-white"
             >
-              <span>交易明細資料匯出</span>
+              <span>資料匯出與備份還原</span>
               <span className="text-xs text-latte-500">{mobileExpandedSection === 'export' ? '▲' : '▼'}</span>
             </button>
-            <div className={`${mobileExpandedSection === 'export' ? 'flex' : 'hidden'} md:flex px-5 pb-5 pt-1 md:pt-5 flex-wrap items-center justify-between gap-3`}>
+            <div className={`${mobileExpandedSection === 'export' ? 'block' : 'hidden'} md:block px-5 pb-5 pt-1 md:pt-5 space-y-4`}>
               <div>
-                <h3 className="hidden md:block font-bold text-base">交易明細資料匯出</h3>
-                <p className="text-xs text-latte-500 dark:text-neutral-400 mt-0.5">將目前帳本的所有收支紀錄匯出為 Excel 相容的 CSV 檔案</p>
+                <h3 className="hidden md:block font-bold text-base">資料匯出與備份還原</h3>
+                <p className="text-xs text-latte-500 dark:text-neutral-400 mt-0.5">支援 Excel 相容 CSV 報表匯出入，以及完整帳本 JSON 備份與還原</p>
               </div>
-              <button
-                type="button"
-                onClick={exportCsv}
-                className="px-4 py-2.5 rounded-xl bg-latte-100 dark:bg-neutral-700 hover:bg-latte-200 dark:hover:bg-neutral-600 text-latte-800 dark:text-white font-semibold text-xs transition"
-              >
-                匯出 CSV 報表
-              </button>
+              <input
+                ref={csvFileInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                onChange={handleImportCsvFile}
+                className="hidden"
+              />
+              <input
+                ref={jsonFileInputRef}
+                type="file"
+                accept=".json,application/json"
+                onChange={handleRestoreJsonBackup}
+                className="hidden"
+              />
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <button
+                  type="button"
+                  onClick={exportCsv}
+                  className="px-3.5 py-2.5 rounded-xl bg-latte-600 hover:bg-latte-700 text-white font-semibold text-xs transition text-center"
+                >
+                  匯出 CSV 報表
+                </button>
+                <button
+                  type="button"
+                  onClick={() => csvFileInputRef.current?.click()}
+                  className="px-3.5 py-2.5 rounded-xl bg-latte-100 dark:bg-neutral-700 hover:bg-latte-200 dark:hover:bg-neutral-600 text-latte-800 dark:text-white font-semibold text-xs border border-latte-300 dark:border-neutral-600 transition text-center"
+                >
+                  匯入 CSV 報表
+                </button>
+                <button
+                  type="button"
+                  onClick={exportJsonBackup}
+                  className="px-3.5 py-2.5 rounded-xl bg-latte-600 hover:bg-latte-700 text-white font-semibold text-xs transition text-center"
+                >
+                  匯出 JSON 備份
+                </button>
+                <button
+                  type="button"
+                  onClick={() => jsonFileInputRef.current?.click()}
+                  className="px-3.5 py-2.5 rounded-xl bg-latte-100 dark:bg-neutral-700 hover:bg-latte-200 dark:hover:bg-neutral-600 text-latte-800 dark:text-white font-semibold text-xs border border-latte-300 dark:border-neutral-600 transition text-center"
+                >
+                  還原 JSON 備份
+                </button>
+              </div>
             </div>
           </div>
 
@@ -3699,7 +3965,7 @@
                 >
                   {activeLedgers.map((l) => (
                     <option key={l.id} value={l.id}>
-                      {l.type === 'couple' ? '💑 ' : '👤 '}{l.name} ({l.currency})
+                      {l.name} ({l.currency})
                     </option>
                   ))}
                 </select>
@@ -3745,7 +4011,7 @@
               {activeLedgers.length === 0 && <option value="">尚無啟用中的帳本</option>}
               {activeLedgers.map((l) => (
                 <option key={l.id} value={l.id}>
-                  {l.type === 'couple' ? '💑 ' : '👤 '}{l.name} ({l.currency})
+                  {l.name} ({l.currency})
                 </option>
               ))}
             </select>
@@ -3895,6 +4161,12 @@
                     setPaymentMethods((prev) => [...prev, payload]);
                   } else if (action === 'togglePaymentMethod') {
                     setPaymentMethods((prev) => prev.map((pm) => (pm.id === payload.id ? { ...pm, is_active: !pm.is_active } : pm)));
+                  } else if (action === 'importTransactions') {
+                    setTransactions((prev) => [...payload, ...prev]);
+                  } else if (action === 'restoreJsonBackup') {
+                    if (payload.transactions?.length) setTransactions((prev) => [...payload.transactions, ...prev]);
+                    if (payload.categories?.length) setCategories((prev) => [...prev, ...payload.categories]);
+                    if (payload.paymentMethods?.length) setPaymentMethods((prev) => [...prev, ...payload.paymentMethods]);
                   }
                 }}
                 user={user}
