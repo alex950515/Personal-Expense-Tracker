@@ -1328,12 +1328,24 @@
       const [statType, setStatType] = useState('expense');
       const [periodMode, setPeriodMode] = useState('month');
       const [selectedYear, setSelectedYear] = useState(() => (selectedMonth ? selectedMonth.slice(0, 4) : getTodayStr().slice(0, 4)));
+      const [expandedMajor, setExpandedMajor] = useState(null);
+      const [pieDimension, setPieDimension] = useState('category'); // 'category' | 'member'
 
       useEffect(() => {
         if (selectedMonth) {
           setSelectedYear(selectedMonth.slice(0, 4));
         }
       }, [selectedMonth]);
+
+      useEffect(() => {
+        setExpandedMajor(null);
+      }, [statType, periodMode, selectedMonth, selectedYear, activeLedger?.id]);
+
+      useEffect(() => {
+        if (activeLedger?.type !== 'couple' && pieDimension !== 'category') {
+          setPieDimension('category');
+        }
+      }, [activeLedger?.type, pieDimension]);
 
       const availableYears = useMemo(() => {
         const years = new Set([getTodayStr().slice(0, 4), selectedMonth.slice(0, 4)]);
@@ -1375,14 +1387,18 @@
       const byMajor = useMemo(() => {
         const map = {};
         filteredTx.forEach((t) => {
-          map[t.major_category] = (map[t.major_category] || 0) + (Number(t.amount) || 0);
+          if (!map[t.major_category]) {
+            map[t.major_category] = { name: t.major_category, amount: 0, items: [] };
+          }
+          map[t.major_category].amount += Number(t.amount) || 0;
+          map[t.major_category].items.push(t);
         });
-        return Object.entries(map)
-          .map(([name, amount]) => ({
-            name,
-            amount,
-            pct: totalAmount > 0 ? Math.round((amount / totalAmount) * 100) : 0,
-            exactRatio: totalAmount > 0 ? amount / totalAmount : 0,
+        return Object.values(map)
+          .map((entry) => ({
+            ...entry,
+            pct: totalAmount > 0 ? Math.round((entry.amount / totalAmount) * 100) : 0,
+            exactRatio: totalAmount > 0 ? entry.amount / totalAmount : 0,
+            items: [...entry.items].sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.created_ms || 0) - (a.created_ms || 0)),
           }))
           .sort((a, b) => b.amount - a.amount)
           .map((item, idx) => ({
@@ -1391,14 +1407,49 @@
           }));
       }, [filteredTx, totalAmount]);
 
+      const byMember = useMemo(() => {
+        if (activeLedger?.type !== 'couple') return [];
+        const map = {};
+        filteredTx.forEach((t) => {
+          const key = t.payer_id || t.payer_nickname || 'member';
+          const nick = t.payer_nickname || '成員';
+          if (!map[key]) {
+            map[key] = { key, name: nick, nickname: nick, amount: 0, items: [] };
+          }
+          map[key].name = nick;
+          map[key].nickname = nick;
+          map[key].amount += Number(t.amount) || 0;
+          map[key].items.push(t);
+        });
+        return Object.values(map)
+          .map((entry) => ({
+            ...entry,
+            pct: totalAmount > 0 ? Math.round((entry.amount / totalAmount) * 100) : 0,
+            exactRatio: totalAmount > 0 ? entry.amount / totalAmount : 0,
+            items: [...entry.items].sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.created_ms || 0) - (a.created_ms || 0)),
+          }))
+          .sort((a, b) => b.amount - a.amount)
+          .map((item, idx) => ({
+            ...item,
+            color: PIE_COLORS[idx % PIE_COLORS.length],
+          }));
+      }, [filteredTx, totalAmount, activeLedger]);
+
+      const activePieData = useMemo(() => {
+        if (activeLedger?.type === 'couple' && pieDimension === 'member') {
+          return byMember;
+        }
+        return byMajor;
+      }, [activeLedger?.type, pieDimension, byMember, byMajor]);
+
       const pieSlices = useMemo(() => {
-        if (totalAmount <= 0 || byMajor.length === 0) return [];
+        if (totalAmount <= 0 || activePieData.length === 0) return [];
         const cx = 80;
         const cy = 80;
         const r = 68;
         let cumulativeAngle = -Math.PI / 2;
 
-        return byMajor.map((item) => {
+        return activePieData.map((item) => {
           const sliceAngle = item.exactRatio * Math.PI * 2;
           const startAngle = cumulativeAngle;
           const endAngle = cumulativeAngle + sliceAngle;
@@ -1415,29 +1466,7 @@
           const d = `M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${largeArcFlag} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z`;
           return { ...item, isFullCircle: false, d };
         });
-      }, [byMajor, totalAmount]);
-
-      const byMember = useMemo(() => {
-        if (activeLedger?.type !== 'couple') return [];
-        const map = {};
-        filteredTx.forEach((t) => {
-          const key = t.payer_id || t.payer_nickname || 'member';
-          const nick = t.payer_nickname || '成員';
-          if (!map[key]) {
-            map[key] = { key, nickname: nick, amount: 0, items: [] };
-          }
-          map[key].nickname = nick;
-          map[key].amount += Number(t.amount) || 0;
-          map[key].items.push(t);
-        });
-        return Object.values(map)
-          .map((entry) => ({
-            ...entry,
-            pct: totalAmount > 0 ? Math.round((entry.amount / totalAmount) * 100) : 0,
-            items: [...entry.items].sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.created_ms || 0) - (a.created_ms || 0)),
-          }))
-          .sort((a, b) => b.amount - a.amount);
-      }, [filteredTx, totalAmount, activeLedger]);
+      }, [activePieData, totalAmount]);
 
       return (
         <div className="space-y-5">
@@ -1520,15 +1549,43 @@
           )}
 
           <div className="bg-white dark:bg-neutral-800 rounded-2xl p-5 border border-latte-200 dark:border-neutral-700 space-y-4">
-            <div className="flex items-center justify-between border-b border-latte-100 dark:border-neutral-700 pb-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-latte-100 dark:border-neutral-700 pb-3">
               <span className="font-bold text-sm sm:text-base">
                 {periodMode === 'year'
                   ? (statType === 'expense' ? `${selectedYear} 年總支出` : `${selectedYear} 年總收入`)
                   : (statType === 'expense' ? '本月總支出' : '本月總收入')}
               </span>
-              <span className={`font-extrabold text-lg ${statType === 'expense' ? 'text-rose-600' : 'text-emerald-600'}`}>
-                {currencySymbol}{totalAmount.toLocaleString()}
-              </span>
+              <div className="flex items-center gap-2.5">
+                {activeLedger?.type === 'couple' && (
+                  <div className="flex bg-latte-100 dark:bg-neutral-700 p-0.5 rounded-xl border border-latte-200 dark:border-neutral-600">
+                    <button
+                      type="button"
+                      onClick={() => setPieDimension('category')}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition ${
+                        pieDimension === 'category'
+                          ? 'bg-white dark:bg-neutral-600 text-latte-900 dark:text-white shadow-2xs'
+                          : 'text-latte-600 dark:text-neutral-300'
+                      }`}
+                    >
+                      類別佔比
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPieDimension('member')}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition ${
+                        pieDimension === 'member'
+                          ? 'bg-white dark:bg-neutral-600 text-latte-900 dark:text-white shadow-2xs'
+                          : 'text-latte-600 dark:text-neutral-300'
+                      }`}
+                    >
+                      成員佔比
+                    </button>
+                  </div>
+                )}
+                <span className={`font-extrabold text-lg ${statType === 'expense' ? 'text-rose-600' : 'text-emerald-600'}`}>
+                  {currencySymbol}{totalAmount.toLocaleString()}
+                </span>
+              </div>
             </div>
 
             {byMajor.length === 0 ? (
@@ -1541,14 +1598,16 @@
                   <svg viewBox="0 0 160 160" className="w-40 h-40 shrink-0">
                     {pieSlices.map((slice) =>
                       slice.isFullCircle ? (
-                        <circle key={slice.name} cx={slice.cx} cy={slice.cy} r={slice.r} fill={slice.color} />
+                        <circle key={slice.key || slice.name} cx={slice.cx} cy={slice.cy} r={slice.r} fill={slice.color} />
                       ) : (
-                        <path key={slice.name} d={slice.d} fill={slice.color} stroke="#ffffff" strokeWidth="1.5" />
+                        <path key={slice.key || slice.name} d={slice.d} fill={slice.color} stroke="#ffffff" strokeWidth="1.5" />
                       )
                     )}
                     <circle cx="80" cy="80" r="34" className="fill-white dark:fill-neutral-800" />
                     <text x="80" y="77" textAnchor="middle" className="fill-latte-500 dark:fill-neutral-400 text-[10px] font-medium">
-                      {statType === 'expense' ? '總支出' : '總收入'}
+                      {activeLedger?.type === 'couple' && pieDimension === 'member'
+                        ? (statType === 'expense' ? '成員支出' : '成員入帳')
+                        : (statType === 'expense' ? '類別支出' : '類別收入')}
                     </text>
                     <text x="80" y="92" textAnchor="middle" className="fill-latte-900 dark:fill-white text-[11px] font-bold">
                       100%
@@ -1556,8 +1615,8 @@
                   </svg>
 
                   <div className="w-full grid grid-cols-2 gap-2 text-xs">
-                    {byMajor.map((item) => (
-                      <div key={item.name} className="flex items-center justify-between gap-1.5 bg-white dark:bg-neutral-800 px-2.5 py-1.5 rounded-xl border border-latte-200/60 dark:border-neutral-700">
+                    {activePieData.map((item) => (
+                      <div key={item.key || item.name} className="flex items-center justify-between gap-1.5 bg-white dark:bg-neutral-800 px-2.5 py-1.5 rounded-xl border border-latte-200/60 dark:border-neutral-700">
                         <div className="flex items-center gap-1.5 min-w-0">
                           <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: item.color }}></span>
                           <span className="font-semibold truncate">{item.name}</span>
@@ -1568,24 +1627,71 @@
                   </div>
                 </div>
 
-                <div className="space-y-3">
-                  {byMajor.map((item) => (
-                    <div key={item.name} className="space-y-1.5 text-xs sm:text-sm">
-                      <div className="flex justify-between font-semibold">
-                        <span className="flex items-center gap-1.5">
-                          <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: item.color }}></span>
-                          {item.name} ({item.pct}%)
-                        </span>
-                        <span>{currencySymbol}{item.amount.toLocaleString()}</span>
-                      </div>
-                      <div className="w-full h-2.5 rounded-full bg-latte-100 dark:bg-neutral-700 overflow-hidden">
+                <div className="space-y-2.5">
+                  {activeLedger?.type !== 'couple' && (
+                    <div className="text-[11px] text-latte-500 dark:text-neutral-400">點擊長條圖可展開查看該類別帳目明細</div>
+                  )}
+                  {byMajor.map((item) => {
+                    const isPersonal = activeLedger?.type !== 'couple';
+                    const isExpanded = isPersonal && expandedMajor === item.name;
+                    return (
+                      <div
+                        key={item.name}
+                        className={`rounded-2xl transition ${
+                          isPersonal
+                            ? 'p-2.5 -mx-2.5 hover:bg-latte-50 dark:hover:bg-neutral-700/40 cursor-pointer'
+                            : ''
+                        } ${isExpanded ? 'bg-latte-50/90 dark:bg-neutral-900/40 border border-latte-200/70 dark:border-neutral-700 p-3 mx-0' : ''}`}
+                      >
                         <div
-                          className="h-full transition-all"
-                          style={{ width: `${item.pct}%`, backgroundColor: item.color }}
-                        ></div>
+                          onClick={() => {
+                            if (isPersonal) {
+                              setExpandedMajor((prev) => (prev === item.name ? null : item.name));
+                            }
+                          }}
+                          className="space-y-1.5 text-xs sm:text-sm"
+                        >
+                          <div className="flex justify-between font-semibold">
+                            <span className="flex items-center gap-1.5">
+                              <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: item.color }}></span>
+                              {item.name} ({item.pct}%)
+                              {isPersonal && (
+                                <span className="text-[10px] text-latte-500 dark:text-neutral-400 font-normal">
+                                  · {item.items.length} 筆 {isExpanded ? '▲' : '▼'}
+                                </span>
+                              )}
+                            </span>
+                            <span>{currencySymbol}{item.amount.toLocaleString()}</span>
+                          </div>
+                          <div className="w-full h-2.5 rounded-full bg-latte-100 dark:bg-neutral-700 overflow-hidden">
+                            <div
+                              className="h-full transition-all"
+                              style={{ width: `${item.pct}%`, backgroundColor: item.color }}
+                            ></div>
+                          </div>
+                        </div>
+
+                        {isExpanded && (
+                          <div className="mt-2.5 pt-2 border-t border-latte-200/70 dark:border-neutral-700/70 divide-y divide-latte-100 dark:divide-neutral-800">
+                            {item.items.map((tx) => (
+                              <div key={tx.id} className="py-1.5 flex items-center justify-between gap-2 text-xs">
+                                <div className="min-w-0 flex items-center gap-1.5">
+                                  <span className="text-[11px] text-latte-500 dark:text-neutral-400 shrink-0">{tx.date?.slice(5)}</span>
+                                  <span className="font-semibold text-latte-800 dark:text-neutral-200 shrink-0">{tx.sub_category}</span>
+                                  {tx.item_name && (
+                                    <span className="text-latte-600 dark:text-neutral-400 truncate">· {tx.item_name}</span>
+                                  )}
+                                </div>
+                                <span className={`font-semibold shrink-0 ${statType === 'expense' ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                                  {currencySymbol}{Number(tx.amount).toLocaleString()}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -3869,15 +3975,23 @@
       const [txModalOpen, setTxModalOpen] = useState(false);
       const [editingTx, setEditingTx] = useState(null);
 
-      // 行動版瀏覽器返回鍵支援：攔截 popstate，優先關閉彈窗或返回首頁，避免直接退出畫面
+      // 行動版瀏覽器與 PWA 返回鍵支援：使用 hash + 多層歷史紀錄緩衝，防止按下返回鍵直接跳回手機主頁
       const navStateRef = useRef({ txModalOpen: false, dialogState: null, configModalOpen: false, activeTab: 'home' });
       navStateRef.current = { txModalOpen, dialogState, configModalOpen, activeTab };
 
       useEffect(() => {
-        try {
-          window.history.replaceState({ appGuard: 'base' }, '');
-          window.history.pushState({ appGuard: 'active' }, '');
-        } catch (e) {}
+        const pushGuardEntries = () => {
+          try {
+            const baseUrl = window.location.pathname + window.location.search;
+            if (!window.history.state || !window.history.state.appGuard) {
+              window.history.replaceState({ appGuard: 'base' }, '', baseUrl + '#base');
+            }
+            window.history.pushState({ appGuard: 'guard1' }, '', baseUrl + '#app1');
+            window.history.pushState({ appGuard: 'guard2' }, '', baseUrl + '#app2');
+          } catch (e) {}
+        };
+
+        pushGuardEntries();
 
         const handlePopState = () => {
           const cur = navStateRef.current;
@@ -3885,31 +3999,41 @@
             const res = cur.dialogState.resolve;
             setDialogState(null);
             if (res) res(null);
-            try { window.history.pushState({ appGuard: 'active' }, ''); } catch (e) {}
+            pushGuardEntries();
             return;
           }
           if (cur.txModalOpen) {
             setTxModalOpen(false);
             setEditingTx(null);
-            try { window.history.pushState({ appGuard: 'active' }, ''); } catch (e) {}
+            pushGuardEntries();
             return;
           }
           if (cur.configModalOpen) {
             setConfigModalOpen(false);
-            try { window.history.pushState({ appGuard: 'active' }, ''); } catch (e) {}
+            pushGuardEntries();
             return;
           }
           if (cur.activeTab !== 'home') {
             setActiveTab('home');
-            try { window.history.pushState({ appGuard: 'active' }, ''); } catch (e) {}
+            pushGuardEntries();
             return;
           }
-          try { window.history.pushState({ appGuard: 'active' }, ''); } catch (e) {}
+          pushGuardEntries();
           showToast('已在首頁畫面');
         };
 
+        const handleFirstInteraction = () => {
+          pushGuardEntries();
+        };
+
         window.addEventListener('popstate', handlePopState);
-        return () => window.removeEventListener('popstate', handlePopState);
+        window.addEventListener('touchstart', handleFirstInteraction, { once: true, passive: true });
+        window.addEventListener('click', handleFirstInteraction, { once: true });
+        return () => {
+          window.removeEventListener('popstate', handlePopState);
+          window.removeEventListener('touchstart', handleFirstInteraction);
+          window.removeEventListener('click', handleFirstInteraction);
+        };
       }, []);
 
       useEffect(() => {
