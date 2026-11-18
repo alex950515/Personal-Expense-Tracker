@@ -1327,12 +1327,74 @@
       );
     }
 
-    function StatsView({ activeLedger, currencySymbol = 'NT$', selectedMonth, setSelectedMonth, allTransactions }) {
+    function StatsView({ isDemoMode, activeLedger, currencySymbol = 'NT$', selectedMonth, setSelectedMonth, allTransactions }) {
       const [statType, setStatType] = useState('expense');
       const [periodMode, setPeriodMode] = useState('month');
       const [selectedYear, setSelectedYear] = useState(() => (selectedMonth ? selectedMonth.slice(0, 4) : getTodayStr().slice(0, 4)));
       const [expandedMajor, setExpandedMajor] = useState(null);
       const [pieDimension, setPieDimension] = useState('category'); // 'category' | 'member'
+      const [annualTransactions, setAnnualTransactions] = useState([]);
+      const [earliestYear, setEarliestYear] = useState('');
+
+      // 年度統計只在使用者切換至「年度」時讀取所選年度，不再常駐載入整本帳本。
+      useEffect(() => {
+        if (!activeLedger?.id || periodMode !== 'year' || isDemoMode) return;
+        let cancelled = false;
+        setAnnualTransactions([]);
+        const db = firebase.firestore();
+        const start = `${selectedYear}-01-01`;
+        const end = `${String(Number(selectedYear) + 1).padStart(4, '0')}-01-01`;
+        const unsubscribe = db.collection('transactions')
+          .where('ledger_id', '==', activeLedger.id)
+          .where('date', '>=', start)
+          .where('date', '<', end)
+          .onSnapshot((snap) => {
+            if (cancelled) return;
+            const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+            list.sort((a, b) => {
+              if (b.date !== a.date) return (b.date || '').localeCompare(a.date || '');
+              return (b.created_ms || 0) - (a.created_ms || 0);
+            });
+            setAnnualTransactions(list);
+          }, (err) => {
+            console.error('年度統計載入失敗：', err);
+          });
+        return () => {
+          cancelled = true;
+          unsubscribe();
+        };
+      }, [activeLedger?.id, periodMode, selectedYear, isDemoMode]);
+
+      // 單機體驗模式使用本機示範資料，不建立 Firestore 監聽。
+      useEffect(() => {
+        if (isDemoMode && periodMode === 'year') {
+          setAnnualTransactions(allTransactions || []);
+        }
+      }, [isDemoMode, periodMode, allTransactions]);
+
+      // 只讀取最早一筆交易來建立可選年份，不必下載全部歷史帳目。
+      useEffect(() => {
+        if (!activeLedger?.id || isDemoMode) return;
+        let cancelled = false;
+        firebase.firestore().collection('transactions')
+          .where('ledger_id', '==', activeLedger.id)
+          .orderBy('date', 'asc')
+          .limit(1)
+          .get()
+          .then((snap) => {
+            if (cancelled) return;
+            const date = snap.empty ? '' : (snap.docs[0].data().date || '');
+            setEarliestYear(date.slice(0, 4));
+          })
+          .catch((err) => console.error('查詢最早交易年份失敗：', err));
+        return () => { cancelled = true; };
+      }, [activeLedger?.id, isDemoMode]);
+
+      useEffect(() => {
+        if (!isDemoMode) return;
+        const years = (allTransactions || []).map((t) => (t.date || '').slice(0, 4)).filter(Boolean);
+        setEarliestYear(years.length ? years.sort()[0] : '');
+      }, [isDemoMode, allTransactions]);
 
       useEffect(() => {
         if (selectedMonth) {
@@ -1351,20 +1413,19 @@
       }, [activeLedger?.type, pieDimension]);
 
       const availableYears = useMemo(() => {
-        const years = new Set([getTodayStr().slice(0, 4), selectedMonth.slice(0, 4)]);
-        (allTransactions || []).forEach((t) => {
-          if (t.date && t.date.length >= 4) years.add(t.date.slice(0, 4));
-        });
+        const currentYear = Number(getTodayStr().slice(0, 4));
+        const firstYear = Number(earliestYear || selectedMonth.slice(0, 4));
+        const years = new Set([String(currentYear), selectedMonth.slice(0, 4)]);
+        if (Number.isFinite(firstYear) && firstYear <= currentYear) {
+          for (let y = firstYear; y <= currentYear; y++) years.add(String(y));
+        }
         return Array.from(years).sort((a, b) => b.localeCompare(a));
-      }, [allTransactions, selectedMonth]);
+      }, [earliestYear, selectedMonth]);
 
       const periodTx = useMemo(() => {
-        return (allTransactions || []).filter((t) => {
-          if (!t.date) return false;
-          if (periodMode === 'year') return t.date.startsWith(selectedYear);
-          return t.date.startsWith(selectedMonth);
-        });
-      }, [allTransactions, periodMode, selectedYear, selectedMonth]);
+        if (periodMode === 'year') return annualTransactions || [];
+        return (allTransactions || []).filter((t) => t.date && t.date.startsWith(selectedMonth));
+      }, [allTransactions, annualTransactions, periodMode, selectedMonth]);
 
       const yearSummary = useMemo(() => {
         let income = 0;
@@ -2622,9 +2683,11 @@
           const collections = ['transactions', 'categories', 'payment_methods', 'budgets'];
           for (const col of collections) {
             const snap = await db.collection(col).where('ledger_id', '==', ledger.id).get();
-            const batch = db.batch();
-            snap.docs.forEach((d) => batch.delete(d.ref));
-            await batch.commit();
+            for (let i = 0; i < snap.docs.length; i += 400) {
+              const batch = db.batch();
+              snap.docs.slice(i, i + 400).forEach((d) => batch.delete(d.ref));
+              await batch.commit();
+            }
           }
           await db.collection('ledgers').doc(ledger.id).delete();
           showToast(`已永久刪除「${ledger.name}」`);
@@ -2699,9 +2762,19 @@
 
         let syncExistingTx = false;
         if (nameChanged) {
-          const matchingCount = (transactions || []).filter(
-            (t) => t.type === oldType && t.major_category === oldMajor && t.sub_category === oldSub
-          ).length;
+          let matchingTxDocs = [];
+          if (!isDemoMode && activeLedger) {
+            const matchingSnap = await firebase.firestore().collection('transactions')
+              .where('ledger_id', '==', activeLedger.id)
+              .where('type', '==', oldType)
+              .where('major_category', '==', oldMajor)
+              .where('sub_category', '==', oldSub)
+              .get();
+            matchingTxDocs = matchingSnap.docs;
+          }
+          const matchingCount = isDemoMode
+            ? (transactions || []).filter((t) => t.type === oldType && t.major_category === oldMajor && t.sub_category === oldSub).length
+            : matchingTxDocs.length;
           if (matchingCount > 0) {
             const choice = await askChoice({
               title: '更動分類名稱確認',
@@ -2737,11 +2810,11 @@
           if (syncExistingTx && activeLedger) {
             const txSnap = await db.collection('transactions')
               .where('ledger_id', '==', activeLedger.id)
+              .where('type', '==', oldType)
+              .where('major_category', '==', oldMajor)
+              .where('sub_category', '==', oldSub)
               .get();
-            const targetDocs = txSnap.docs.filter((d) => {
-              const data = d.data();
-              return data.type === oldType && data.major_category === oldMajor && data.sub_category === oldSub;
-            });
+            const targetDocs = txSnap.docs;
             for (let i = 0; i < targetDocs.length; i += 400) {
               const batch = db.batch();
               targetDocs.slice(i, i + 400).forEach((d) => {
@@ -2826,9 +2899,19 @@
       }
 
       async function deleteCategory(cat) {
-        const matchingCount = (transactions || []).filter(
-          (t) => t.type === cat.type && t.major_category === cat.major && t.sub_category === cat.sub
-        ).length;
+        let matchingTxDocs = [];
+        if (!isDemoMode && activeLedger) {
+          const matchingSnap = await firebase.firestore().collection('transactions')
+            .where('ledger_id', '==', activeLedger.id)
+            .where('type', '==', cat.type)
+            .where('major_category', '==', cat.major)
+            .where('sub_category', '==', cat.sub)
+            .get();
+          matchingTxDocs = matchingSnap.docs;
+        }
+        const matchingCount = isDemoMode
+          ? (transactions || []).filter((t) => t.type === cat.type && t.major_category === cat.major && t.sub_category === cat.sub).length
+          : matchingTxDocs.length;
 
         let deleteTransactions = false;
         if (matchingCount > 0) {
@@ -2870,11 +2953,11 @@
           if (deleteTransactions && activeLedger) {
             const txSnap = await db.collection('transactions')
               .where('ledger_id', '==', activeLedger.id)
+              .where('type', '==', cat.type)
+              .where('major_category', '==', cat.major)
+              .where('sub_category', '==', cat.sub)
               .get();
-            const targetDocs = txSnap.docs.filter((d) => {
-              const data = d.data();
-              return data.type === cat.type && data.major_category === cat.major && data.sub_category === cat.sub;
-            });
+            const targetDocs = txSnap.docs;
             for (let i = 0; i < targetDocs.length; i += 400) {
               const batch = db.batch();
               targetDocs.slice(i, i + 400).forEach((d) => batch.delete(d.ref));
@@ -2923,13 +3006,20 @@
         }
       }
 
-      function exportCsv() {
-        if (!transactions || transactions.length === 0) {
+      async function exportCsv() {
+        if (!activeLedger) return;
+        try {
+        const exportTransactions = isDemoMode
+          ? (transactions || [])
+          : (await firebase.firestore().collection('transactions')
+              .where('ledger_id', '==', activeLedger.id)
+              .get()).docs.map((d) => ({ id: d.id, ...d.data() }));
+        if (exportTransactions.length === 0) {
           showToast('目前帳本尚無可匯出的交易紀錄');
           return;
         }
         const headers = ['日期', '類型', '大分類', '子分類', '項目名稱', '金額', '付款方式', '付款人', '備註'];
-        const rows = transactions.map((t) => [
+        const rows = exportTransactions.map((t) => [
           t.date || '',
           t.type === 'income' ? '收入' : '支出',
           t.major_category || '',
@@ -2949,6 +3039,9 @@
         a.click();
         URL.revokeObjectURL(url);
         showToast('已匯出 CSV 交易明細');
+        } catch (err) {
+          showToast('匯出 CSV 失敗：' + err.message);
+        }
       }
 
       function parseCsvLine(line) {
@@ -3040,8 +3133,14 @@
         }
       }
 
-      function exportJsonBackup() {
+      async function exportJsonBackup() {
         if (!activeLedger) return;
+        try {
+        const backupTransactions = isDemoMode
+          ? (transactions || [])
+          : (await firebase.firestore().collection('transactions')
+              .where('ledger_id', '==', activeLedger.id)
+              .get()).docs.map((d) => ({ id: d.id, ...d.data() }));
         const backupPayload = {
           version: 1,
           exported_at: new Date().toISOString(),
@@ -3052,7 +3151,7 @@
           },
           categories: (categories || []).map(({ id, ledger_id, ...rest }) => rest),
           payment_methods: (paymentMethods || []).map(({ id, ledger_id, ...rest }) => rest),
-          transactions: (transactions || []).map(({ id, ledger_id, ...rest }) => rest),
+          transactions: backupTransactions.map(({ id, ledger_id, ...rest }) => rest),
         };
         const blob = new Blob([JSON.stringify(backupPayload, null, 2)], { type: 'application/json;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
@@ -3062,6 +3161,9 @@
         a.click();
         URL.revokeObjectURL(url);
         showToast('已匯出 JSON 完整備份檔');
+        } catch (err) {
+          showToast('匯出 JSON 失敗：' + err.message);
+        }
       }
 
       async function handleRestoreJsonBackup(e) {
@@ -4092,16 +4194,39 @@
         if (!activeLedgerId || !fbReady || isDemoMode) return;
         const db = firebase.firestore();
 
-        const unsubTx = db.collection('transactions')
-          .where('ledger_id', '==', activeLedgerId)
-          .onSnapshot((snap) => {
-            const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-            list.sort((a, b) => {
-              if (b.date !== a.date) return b.date.localeCompare(a.date);
-              return (b.created_ms || 0) - (a.created_ms || 0);
-            });
-            setTransactions(list);
+        // 預設只監聽目前選取月份；自訂日期區間則只讀取指定範圍。
+        let startDate = `${selectedMonth}-01`;
+        let endDate = (() => {
+          const [year, month] = selectedMonth.split('-').map(Number);
+          return `${month === 12 ? year + 1 : year}-${String(month === 12 ? 1 : month + 1).padStart(2, '0')}-01`;
+        })();
+        let query = db.collection('transactions').where('ledger_id', '==', activeLedgerId);
+        if (customDateRange?.enabled) {
+          if (customDateRange.start) {
+            query = query.where('date', '>=', customDateRange.start);
+          }
+          if (customDateRange.end) {
+            query = query.where('date', '<=', customDateRange.end);
+          }
+          // 避免自訂區間開啟但完全沒有日期時退化成整本帳本讀取。
+          if (!customDateRange.start && !customDateRange.end) {
+            query = query.where('date', '>=', startDate).where('date', '<', endDate);
+          }
+        } else {
+          query = query.where('date', '>=', startDate).where('date', '<', endDate);
+        }
+
+        setTransactions([]);
+        const unsubTx = query.onSnapshot((snap) => {
+          const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          list.sort((a, b) => {
+            if (b.date !== a.date) return (b.date || '').localeCompare(a.date || '');
+            return (b.created_ms || 0) - (a.created_ms || 0);
           });
+          setTransactions(list);
+        }, (err) => {
+          console.error('交易明細載入失敗：', err);
+        });
 
         const unsubCat = db.collection('categories')
           .where('ledger_id', '==', activeLedgerId)
@@ -4122,7 +4247,7 @@
           unsubCat();
           unsubPm();
         };
-      }, [activeLedgerId, fbReady, isDemoMode]);
+      }, [activeLedgerId, selectedMonth, customDateRange.enabled, customDateRange.start, customDateRange.end, fbReady, isDemoMode]);
 
       useEffect(() => {
         if (!activeLedgerId || !selectedMonth) return;
@@ -4493,6 +4618,7 @@
 
             {activeTab === 'stats' && activeLedger && (
               <StatsView
+                isDemoMode={isDemoMode}
                 activeLedger={activeLedger}
                 currencySymbol={currencySymbol}
                 selectedMonth={selectedMonth}
